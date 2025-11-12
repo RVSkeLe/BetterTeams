@@ -24,23 +24,20 @@ public class InventoryManagement implements Listener {
 
 	@EventHandler
 	public void onClose(InventoryCloseEvent e) {
+		if (!(e.getInventory().getHolder(false) instanceof EChestComponent.EchestInventoryHolder)) return;
+		if (!(e.getPlayer() instanceof Player player)) return;
 
-		if (e.getView().getType() != InventoryType.CHEST || !e.getView().getTitle().equals(inventoryName) || (!(e.getInventory().getHolder() instanceof EChestComponent.EchestInventoryHolder))) {
-			e.getInventory().getHolder();
-			return;
-		}
-		Team t = adminViewers.get((Player) e.getPlayer());
+		Team t = adminViewers.get(player);
 
 		if (t == null) {
-			t = Team.getTeam((Player) e.getPlayer());
+			t = Team.getTeam(player);
 			if (t == null) {
 				return;
 			}
 		}
 
-		adminViewers.remove((Player) e.getPlayer());
+		adminViewers.remove(player);
 		t.saveEchest();
-
 	}
 
 }
