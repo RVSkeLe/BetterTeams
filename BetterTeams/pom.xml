@@ -218,6 +218,14 @@
             <version>5.5</version>
             <scope>provided</scope>
         </dependency>
+
+        <dependency>
+            <groupId>com.github.ben-manes.caffeine</groupId>
+            <artifactId>caffeine</artifactId>
+            <version>3.1.8</version>
+            <scope>compile</scope>
+        </dependency>
+
     </dependencies>
 
     <build>
@@ -244,6 +252,11 @@
                             <pattern>net.kyori</pattern>
                             <shadedPattern>com.booksaw.betterTeams.lib.net.kyori</shadedPattern>
                         </relocation>
+
+                        <relocation>
+                            <pattern>com.github.benmanes.caffeine</pattern>
+                            <shadedPattern>com.booksaw.betterTeams.lib.caffeine</shadedPattern>
+                        </relocation>
                     </relocations>
                     <filters>
                         <filter>
@@ -269,6 +282,13 @@
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>3.14.1</version>
                 <configuration>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                            <version>${lombok.version}</version>
+                        </path>
+                    </annotationProcessorPaths>
                     <compilerArgs>
                         <arg>-Xlint:deprecation</arg>
                         <arg>-Xlint:unchecked</arg>
