@@ -727,7 +727,7 @@ public class Team {
       if (onlinePlayer.getOpenInventory().getTopInventory().getHolder()
         instanceof EChestComponent.EchestInventoryHolder) {
 
-        Main.plugin.getFoliaLib().getScheduler().runLater(onlinePlayer::closeInventory, 1L);
+        Main.plugin.getFoliaLib().getScheduler().runLater(() -> onlinePlayer.closeInventory(), 1L);
       }
     }
 

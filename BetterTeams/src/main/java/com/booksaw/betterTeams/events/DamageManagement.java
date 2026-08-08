@@ -14,6 +14,7 @@ import org.bukkit.projectiles.ProjectileSource;
 
 import java.util.Collection;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * This class is used to ensure that members of the same team cannot hit each
@@ -25,6 +26,18 @@ public class DamageManagement implements Listener {
 
 	private final boolean disablePotions;
 	private final boolean disableSelf;
+
+	private final Set<PotionEffectType> debuffPotionTypes = Set.of(
+			PotionEffectType.BAD_OMEN,
+			PotionEffectType.BLINDNESS,
+			PotionEffectType.NAUSEA,
+			PotionEffectType.INSTANT_DAMAGE,
+			PotionEffectType.HUNGER,
+			PotionEffectType.MINING_FATIGUE,
+			PotionEffectType.UNLUCK,
+			PotionEffectType.WEAKNESS,
+			PotionEffectType.POISON
+	);
 
 	public DamageManagement() {
 		disablePotions = Main.plugin.getConfig().getBoolean("disablePotions");
@@ -111,15 +124,9 @@ public class DamageManagement implements Listener {
 		Collection<PotionEffect> effects = e.getPotion().getEffects();
 		boolean cancel = false;
 		for (PotionEffect effect : effects) {
-			String type = effect.getType().getName();
-			if (type.equals(PotionEffectType.BAD_OMEN.getName()) || type.equals(PotionEffectType.BLINDNESS.getName())
-					|| type.equals(PotionEffectType.CONFUSION.getName()) || type.equals(PotionEffectType.HARM.getName())
-					|| type.equals(PotionEffectType.HUNGER.getName())
-					|| type.equals(PotionEffectType.SLOW_DIGGING.getName())
-					|| type.equals(PotionEffectType.UNLUCK.getName())
-					|| type.equals(PotionEffectType.WEAKNESS.getName())
-					|| type.equals(PotionEffectType.POISON.getName())) {
+			if (debuffPotionTypes.contains(effect.getType())) {
 				cancel = true;
+				break;
 			}
 		}
 

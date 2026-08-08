@@ -48,8 +48,8 @@
         <!-- Java dependencies -->
         <lombok.version>1.18.46</lombok.version>
 
-        <!-- Spigot API -->
-        <spigot.version>1.20-R0.1-SNAPSHOT</spigot.version>
+        <!-- Paper API -->
+        <paper.version>1.21.4-R0.1-SNAPSHOT</paper.version>
         <folialib.version>0.5.2</folialib.version>
         <bstats.version>3.2.1</bstats.version>
         <adventure.version>4.26.1</adventure.version>
@@ -76,8 +76,8 @@
             <url>https://repo.maven.apache.org/maven2</url>
         </repository>
         <repository>
-            <id>spigot-repo</id>
-            <url>https://hub.spigotmc.org/nexus/content/repositories/snapshots/</url>
+            <id>papermc</id>
+            <url>https://repo.papermc.io/repository/maven-public/</url>
         </repository>
         <repository>
             <id>placeholderapi</id>
@@ -132,11 +132,11 @@
                 <scope>provided</scope>
             </dependency>
 
-            <!-- Spigot API -->
+            <!-- Paper API -->
             <dependency>
-                <groupId>org.spigotmc</groupId>
-                <artifactId>spigot-api</artifactId>
-                <version>${spigot.version}</version>
+                <groupId>io.papermc.paper</groupId>
+                <artifactId>paper-api</artifactId>
+                <version>${paper.version}</version>
                 <scope>provided</scope>
             </dependency>
             <dependency>
