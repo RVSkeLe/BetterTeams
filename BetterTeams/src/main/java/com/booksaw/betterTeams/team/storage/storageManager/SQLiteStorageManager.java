@@ -7,14 +7,12 @@ import com.booksaw.betterTeams.database.BetterTeamsDatabase;
 import com.booksaw.betterTeams.database.TableName;
 import com.booksaw.betterTeams.team.LocationSetComponent;
 import com.booksaw.betterTeams.team.TeamManager;
-import com.booksaw.betterTeams.team.storage.team.SQLTeamStorage;
+import com.booksaw.betterTeams.team.storage.team.SQLiteTeamStorage;
 import com.booksaw.betterTeams.team.storage.team.TeamStorage;
 import lombok.Getter;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.OfflinePlayer;
-import org.bukkit.configuration.file.FileConfiguration;
-import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
@@ -23,47 +21,32 @@ import org.bukkit.event.player.PlayerQuitEvent;
 import org.jetbrains.annotations.Contract;
 import org.jetbrains.annotations.Nullable;
 
-import java.io.File;
-import java.io.IOException;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map.Entry;
 import java.util.UUID;
-import java.util.logging.Level;
 
 import static com.booksaw.betterTeams.util.StringUtil.EMPTY_STRING_ARRAY;
 
-public class SQLStorageManager extends TeamManager implements Listener {
+public class SQLiteStorageManager extends TeamManager implements Listener {
 
 	@Getter
 	private BetterTeamsDatabase database;
 
-	protected final FileConfiguration teamStorage;
-
-	public static final String TEAMLISTSTORAGELOC = "teams";
-
-	public SQLStorageManager() {
+	public SQLiteStorageManager() {
 		setupDatabaseConnection();
 
 		Main.plugin.getServer().getPluginManager().registerEvents(this, Main.plugin);
-
-		// loading the teamStorage variable
-		File f = new File("plugins/BetterTeams/" + TEAMLISTSTORAGELOC + ".yml");
-
-		if (!f.exists()) {
-			Main.plugin.saveResource("teams.yml", false);
-		}
-
-		teamStorage = YamlConfiguration.loadConfiguration(f);
 	}
 
 	private void setupDatabaseConnection() {
 		database = new BetterTeamsDatabase();
-		database.setupConnectionFromConfiguration(Main.plugin.getConfig().getConfigurationSection("database"));
+		database.setupConnectionFromConfiguration();
 		database.setupTables();
 	}
 
@@ -76,7 +59,11 @@ public class SQLStorageManager extends TeamManager implements Listener {
 
 	@Override
 	public UUID getClaimingTeamUUID(Location location) {
+		loadClaims();
+		return claims.get(LocationSetComponent.getString(location));
+	}
 
+	private void loadClaims() {
 		if (claims == null) {
 			claims = new HashMap<>();
 			try (PreparedStatement preparedStatement = database.select("*", TableName.CHESTCLAIMS)) {
@@ -86,11 +73,8 @@ public class SQLStorageManager extends TeamManager implements Listener {
 				}
 			} catch (SQLException e) {
 				e.printStackTrace();
-				return null;
 			}
 		}
-
-		return claims.get(LocationSetComponent.getString(location));
 	}
 
 	@Override
@@ -187,13 +171,13 @@ public class SQLStorageManager extends TeamManager implements Listener {
 
 	@Override
 	public TeamStorage createTeamStorage(Team team) {
-		return new SQLTeamStorage(this, team);
+		return new SQLiteTeamStorage(this, team);
 	}
 
 	@Override
 	public TeamStorage createNewTeamStorage(Team team) {
 		database.insertRecord(TableName.TEAM, "teamID, name", "'" + team.getID() + "', '" + team.getName() + "'");
-		return new SQLTeamStorage(this, team);
+		return new SQLiteTeamStorage(this, team);
 	}
 
 	@Override
@@ -231,13 +215,11 @@ public class SQLStorageManager extends TeamManager implements Listener {
 
 		try {
 			ResultSet results = ps.executeQuery();
-			results.first();
-
 			List<String> toReturn = new ArrayList<>();
 
-			try {
+			if (results.next()) {
 				toReturn.add(results.getString("name"));
-			} catch (SQLException e) {
+			} else {
 				// called when no teams have been created
 				return EMPTY_STRING_ARRAY;
 			}
@@ -282,26 +264,22 @@ public class SQLStorageManager extends TeamManager implements Listener {
 
 	@Override
 	public List<String> getHoloDetails() {
-		return teamStorage.getStringList(HOLOPATH);
+		String serialized = database.getResult("dataValue", TableName.PLUGIN_DATA, "dataKey = '" + HOLOPATH + "'");
+		if (serialized.isEmpty()) {
+			return new ArrayList<>();
+		}
+		return new ArrayList<>(Arrays.asList(serialized.split("\\R")));
 	}
 
 	@Override
 	public void setHoloDetails(List<String> details) {
-		teamStorage.set(HOLOPATH, details);
-		saveTeamsFile();
-	}
-
-	public void saveTeamsFile() {
-		File f = new File("plugins/BetterTeams/" + TEAMLISTSTORAGELOC + ".yml");
-		try {
-			teamStorage.save(f);
-		} catch (IOException ex) {
-			Main.plugin.getLogger().log(Level.SEVERE, "Could not save config to " + f, ex);
-		}
+		database.executeStatement("INSERT INTO %s (dataKey, dataValue) VALUES (?, ?) ON CONFLICT(dataKey) DO UPDATE SET dataValue = excluded.dataValue"
+				.formatted(TableName.PLUGIN_DATA), HOLOPATH, String.join("\n", details));
 	}
 
 	@Override
 	public void addChestClaim(Team team, Location loc) {
+		loadClaims();
 		claims.put(LocationSetComponent.getString(loc), team.getID());
 		database.insertRecord(TableName.CHESTCLAIMS, "teamID, chestLoc",
 				"'" + team.getID() + "', '" + LocationSetComponent.getString(loc) + "'");
@@ -309,13 +287,22 @@ public class SQLStorageManager extends TeamManager implements Listener {
 
 	@Override
 	public void removeChestclaim(Location loc) {
+		loadClaims();
 		claims.remove(LocationSetComponent.getString(loc));
 		database.deleteRecord(TableName.CHESTCLAIMS, "chestLoc LIKE '" + LocationSetComponent.getString(loc) + "'");
 	}
 
-	@Override
-	public void rebuildLookups() {
-		// not required
+	public int getTeamCount() {
+		try (PreparedStatement preparedStatement = database.select("COUNT(*) AS teamCount", TableName.TEAM)) {
+			ResultSet results = preparedStatement.executeQuery();
+			if (results.next()) {
+				return results.getInt("teamCount");
+			}
+		} catch (SQLException e) {
+			Main.plugin.getLogger().warning("Could not count teams for metrics");
+			e.printStackTrace();
+		}
+		return 0;
 	}
 
 	@EventHandler

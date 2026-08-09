@@ -36,7 +36,7 @@ import com.booksaw.betterTeams.team.WarpSetComponent;
 import com.booksaw.betterTeams.team.controller.TeamMessageController;
 import com.booksaw.betterTeams.team.level.LevelManager;
 import com.booksaw.betterTeams.team.level.TeamLevel;
-import com.booksaw.betterTeams.team.storage.StorageType;
+import com.booksaw.betterTeams.team.storage.storageManager.SQLiteStorageManager;
 import com.booksaw.betterTeams.team.storage.team.StoredTeamValue;
 import com.booksaw.betterTeams.team.storage.team.TeamStorage;
 import com.booksaw.betterTeams.text.LegacyTextUtils;
@@ -69,20 +69,12 @@ public class Team {
 
   private static TeamManager TEAMMANAGER;
 
-  public static void setupTeamManager(StorageType storageType) {
+  public static void setupTeamManager() {
     if (TEAMMANAGER != null) {
       throw new IllegalArgumentException("The team manager has already been setup");
     }
 
-    TEAMMANAGER = storageType.getNewTeamManager();
-
-    if (Main.plugin.getConfig().getBoolean("rebuildLookups")) {
-
-      TEAMMANAGER.rebuildLookups();
-
-      Main.plugin.getConfig().set("rebuildLookups", false);
-      Main.plugin.saveConfig();
-    }
+    TEAMMANAGER = new SQLiteStorageManager();
 
   }
 

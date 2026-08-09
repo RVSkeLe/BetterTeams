@@ -33,30 +33,10 @@
 # For a full list of supported languages, use this link: https://betterteams.booksaw.dev/docs/Translations
 language: en
 
-# Determines how team data is stored
-# Possible values: 
-# * SQL - this is the recommended storage method, ensure you configure the database settings below else the plugin will be enabled
-# * YAML - this is the default storage method as it does not require database connection, it is recommended to move to MySQL
-# More storage types to come in the future 
-storageType: YAML
-
-# This section is only used if you select the storageType of SQL 
+# SQLite database settings
 database:
-  host: localhost
-  port: 3306
-  database: spigot
-  user: root
-  password: password
-  additionalOptions:
-    - 'useSSL=false'
-  # Prefix for SQL tables.
-  # After changing this String and reloading the plugin/server,
-  # BetterTeams will start using it as the new Table Prefix when storing and reading team data.
-  # Only recommended changing when setting up your server,
-  # otherwise all team data stored under the last prefix will stop being used until you change it back (if previous tables remain intact).
-  # Thought for network servers that use the same database but are not supposed to share same team data.
-  # Default value is "BetterTeams_" as it has always been, to prevent sudden change if you have been using SQL.
-  tablePrefix: BetterTeams_
+  # File name relative to the BetterTeams plugin folder
+  file: storage.db
 
 # This is the value to determine if the chat prefix is enabled
 # - If this is enabled (true / name) a prefix [TeamName] will be displayed at the begining of chat messages.
@@ -657,10 +637,6 @@ extension:
 # PLEASE NOTE: if you do not update betterteams to the latest version, you will not get bug fixes and new features from the regular updates
 # you will also recieve no support
 checkUpdates: true
-
-# This option can be used to rebuild lookups in the teams.yml file, this should never have to be used unless advised to by booksaw
-# Set this to true to rebuild the lookup tables in teams.yml for seperatedYamlStorage
-rebuildLookups: false
 
 # Number of seconds until a cache hit is invalidated
 #

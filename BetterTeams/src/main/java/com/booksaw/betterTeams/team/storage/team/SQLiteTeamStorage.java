@@ -3,7 +3,7 @@ package com.booksaw.betterTeams.team.storage.team;
 import com.booksaw.betterTeams.*;
 import com.booksaw.betterTeams.database.TableName;
 import com.booksaw.betterTeams.team.meta.TeamMeta;
-import com.booksaw.betterTeams.team.storage.storageManager.SQLStorageManager;
+import com.booksaw.betterTeams.team.storage.storageManager.SQLiteStorageManager;
 import org.bukkit.Bukkit;
 import org.bukkit.inventory.Inventory;
 
@@ -12,11 +12,11 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.*;
 
-public class SQLTeamStorage extends TeamStorage {
+public class SQLiteTeamStorage extends TeamStorage {
 
-	private final SQLStorageManager storageManager;
+	private final SQLiteStorageManager storageManager;
 
-	public SQLTeamStorage(SQLStorageManager storageManager, Team team) {
+	public SQLiteTeamStorage(SQLiteStorageManager storageManager, Team team) {
 		super(team);
 		this.storageManager = storageManager;
 	}
@@ -69,7 +69,7 @@ public class SQLTeamStorage extends TeamStorage {
 
 		try (PreparedStatement ps = storageManager.getDatabase().selectWhere("*", TableName.PLAYERS, getCondition())) {
 			ResultSet result = ps.executeQuery();
-			if (!result.first()) {
+			if (!result.next()) {
 				return toReturn;
 			}
 			do {
@@ -92,7 +92,7 @@ public class SQLTeamStorage extends TeamStorage {
 
 		try (PreparedStatement ps = storageManager.getDatabase().selectWhere("*", TableName.PLAYERS, getCondition())) {
 			ResultSet result = ps.executeQuery();
-			if (!result.first()) {
+			if (!result.next()) {
 				return toReturn;
 			}
 			do {
@@ -113,7 +113,7 @@ public class SQLTeamStorage extends TeamStorage {
 
 		try (PreparedStatement ps = storageManager.getDatabase().selectWhere("*", TableName.BANS, getCondition())) {
 			ResultSet result = ps.executeQuery();
-			if (!result.first()) {
+			if (!result.next()) {
 				return toReturn;
 			}
 			do {
@@ -135,7 +135,7 @@ public class SQLTeamStorage extends TeamStorage {
 		try (PreparedStatement ps = storageManager.getDatabase().selectWhere("*", table,
 				"team1ID LIKE '" + team.getID() + "' OR team2ID LIKE '" + team.getID() + "'")) {
 			ResultSet result = ps.executeQuery();
-			if (!result.first()) {
+			if (!result.next()) {
 				return toReturn;
 			}
 			do {
@@ -167,7 +167,7 @@ public class SQLTeamStorage extends TeamStorage {
 				"receivingTeamID LIKE '" + team.getID() + "'")) {
 
 			ResultSet result = ps.executeQuery();
-			if (!result.first()) {
+			if (!result.next()) {
 				return toReturn;
 			}
 			do {
@@ -210,7 +210,7 @@ public class SQLTeamStorage extends TeamStorage {
 		try (PreparedStatement ps = storageManager.getDatabase().selectWhere("*", TableName.WARPS, getCondition())) {
 
 			ResultSet result = ps.executeQuery();
-			if (!result.first()) {
+			if (!result.next()) {
 				return toReturn;
 			}
 			do {
@@ -233,7 +233,7 @@ public class SQLTeamStorage extends TeamStorage {
 		try (PreparedStatement ps = storageManager.getDatabase().selectWhere("*", TableName.CHESTCLAIMS, getCondition())) {
 
 			ResultSet result = ps.executeQuery();
-			if (!result.first()) {
+			if (!result.next()) {
 				return toReturn;
 			}
 			do {

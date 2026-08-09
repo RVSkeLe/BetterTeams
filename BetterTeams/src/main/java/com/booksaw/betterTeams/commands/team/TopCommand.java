@@ -112,8 +112,8 @@ public class TopCommand extends SubCommand {
 	private void sendTopSyntaxMessage(CommandSender sender, int rank, Team team, String teamIdentifier) {
 		if (team == null || team.getName() == null) {
 			Main.plugin.getLogger()
-					.warning("There is an issue with the team file associated with " + teamIdentifier);
-			Main.plugin.getLogger().warning("in config.yml set 'rebuildLookups' to true and restart your server, if the issue continues please report it to booksaw");
+					.warning("There is an issue with the team stored as " + teamIdentifier);
+			Main.plugin.getLogger().warning("If the issue continues after restarting your server, please report it to booksaw");
 			return;
 		}
 

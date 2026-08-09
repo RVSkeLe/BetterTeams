@@ -2,10 +2,9 @@ package com.booksaw.betterTeams.database.api;
 
 import com.booksaw.betterTeams.Main;
 import com.booksaw.betterTeams.database.TableName;
-import org.bukkit.configuration.ConfigurationSection;
 
+import java.io.File;
 import java.sql.*;
-import java.util.List;
 
 /**
  * API Class to managing databases
@@ -14,33 +13,16 @@ import java.util.List;
  */
 public class Database {
 
-	/**
-	 * Stores the information to create a connection to the database
-	 */
-	private String host;
-	private int port;
-	private String database;
-	private String user;
-	private String password;
-
-	private List<String> storageProperties;
+	private File databaseFile;
 
 	Connection connection;
 
 	/**
-	 * Used to setup a connection from the provided data
-	 *
-	 * @param section The configuration section which contains the database
-	 *                information
+	 * Used to setup the SQLite connection.
 	 */
-	public void setupConnectionFromConfiguration(ConfigurationSection section) {
-
-		host = section.getString("host", "localhost");
-		port = section.getInt("port", 3306);
-		database = section.getString("database", "spigot");
-		user = section.getString("user", "root");
-		password = section.getString("password", "password");
-		storageProperties = section.getStringList("storageProperties");
+	public void setupConnectionFromConfiguration() {
+		String configuredFile = Main.plugin.getConfig().getString("database.file", "storage.db");
+		databaseFile = new File(Main.plugin.getDataFolder(), configuredFile);
 
 		setupConnection();
 
@@ -51,32 +33,24 @@ public class Database {
 	 */
 	public void setupConnection() {
 
-		Main.plugin.getLogger().info("Attempting to connect to database");
-
-		StringBuilder additionalOptions = new StringBuilder();
-		if (storageProperties != null) {
-			for (String property : storageProperties) {
-				additionalOptions.append("&").append(property);
-			}
-		}
+		Main.plugin.getLogger().info("Attempting to connect to SQLite database");
 
 		try {
-			connection = DriverManager.getConnection(
-					"jdbc:mysql://" + host + ":" + port + "/" + database + "?autoReconnect=true" + additionalOptions.toString(),
-					user,
-					password);
+			File parent = databaseFile.getParentFile();
+			if (parent != null && !parent.exists() && !parent.mkdirs()) {
+				throw new SQLException("Could not create SQLite database directory: " + parent);
+			}
+			Class.forName("org.sqlite.JDBC");
+			connection = DriverManager.getConnection("jdbc:sqlite:" + databaseFile.getAbsolutePath());
+			setupSqliteConnection();
 			testDataSource();
 
 		} catch (Exception e) {
-			database = null;
 			for (int i = 0; i < 3; i++) {
 				Main.plugin.getLogger().severe("");
 			}
 			Main.plugin.getLogger()
-					.severe("Connection to the database could not be established, disabling plugin");
-
-			Main.plugin.getLogger().severe(
-					"To use BetterTeams either change the storage type (config.yml/storageType) or correct the database credentials");
+					.severe("Connection to the SQLite database could not be established, disabling plugin");
 
 			for (int i = 0; i < 3; i++) {
 				Main.plugin.getLogger().severe("");
@@ -87,7 +61,7 @@ public class Database {
 			Main.plugin.getServer().getPluginManager().disablePlugin(Main.plugin);
 			return;
 		}
-		Main.plugin.getLogger().info("Connection with the database established");
+		Main.plugin.getLogger().info("Connection with the SQLite database established");
 
 	}
 
@@ -101,21 +75,19 @@ public class Database {
 			throw new IllegalStateException("No SQL connection has been established");
 		}
 
-		StringBuilder additionalOptions = new StringBuilder();
-		for (String property : storageProperties) {
-			additionalOptions.append("&").append(property);
-		}
-
 		try {
 			connection.close();
-			// Also, just a suggestion, but it's not recommended to use autoReconnect=true
-			// as per the MySQL Connector/J developer docs.
-			// https://dev.mysql.com/doc/connector-j/8.0/en/connector-j-connp-props-high-availability-and-clustering.html
-			connection = DriverManager.getConnection(
-					"jdbc:mysql://" + host + ":" + port + "/" + database + "?autoReconnect=true" + additionalOptions, user,
-					password);
+			connection = DriverManager.getConnection("jdbc:sqlite:" + databaseFile.getAbsolutePath());
+			setupSqliteConnection();
 		} catch (SQLException e) {
 			e.printStackTrace();
+		}
+	}
+
+	private void setupSqliteConnection() throws SQLException {
+		try (Statement statement = connection.createStatement()) {
+			statement.execute("PRAGMA foreign_keys = ON");
+			statement.execute("PRAGMA journal_mode = WAL");
 		}
 	}
 
@@ -153,28 +125,25 @@ public class Database {
 	 * @return True if the column exists, false otherwise.
 	 */
 	public boolean hasColumn(TableName table, String column) {
-		String query = "SELECT * FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = ? AND COLUMN_NAME = ?";
+		String query = "PRAGMA table_info(" + table + ")";
 		try (PreparedStatement ps = connection.prepareStatement(query)) {
-			ps.setString(1, table.toString());
-			ps.setString(2, column);
 			try (ResultSet rs = ps.executeQuery()) {
-				return rs.next();
+				while (rs.next()) {
+					if (column.equalsIgnoreCase(rs.getString("name"))) {
+						return true;
+					}
+				}
 			}
 		} catch (SQLException e) {
 			Main.plugin.getLogger().severe("Error checking if column exists: " + table + "." + column);
 			e.printStackTrace();
-			return false;
 		}
+		return false;
 	}
 
 	protected void addColumn(TableName table, String newColumnName, String columnDefinition, String referenceColumn,
 	                         boolean after) {
-		String positionClause = (referenceColumn != null)
-				? (after ? " AFTER " + referenceColumn : " BEFORE " + referenceColumn)
-				: "";
-
-		String update = "ALTER TABLE " + table.toString() + " ADD " + newColumnName + " " + columnDefinition
-				+ positionClause;
+		String update = "ALTER TABLE " + table.toString() + " ADD " + newColumnName + " " + columnDefinition;
 
 		executeStatement(update);
 	}
@@ -223,8 +192,7 @@ public class Database {
 			if (!connection.isValid(2)) {
 				resetConnection();
 			}
-			return connection.prepareStatement(query, ResultSet.TYPE_SCROLL_SENSITIVE,
-					ResultSet.CONCUR_UPDATABLE);
+			return connection.prepareStatement(query);
 		} catch (SQLException e) {
 			Main.plugin.getLogger().severe("Something went wrong while executing SQL");
 			Main.plugin.getLogger().severe("SQL: " + query);

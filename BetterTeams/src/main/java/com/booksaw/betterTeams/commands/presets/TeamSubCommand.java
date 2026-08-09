@@ -66,8 +66,8 @@ public abstract class TeamSubCommand extends SubCommand {
 		TeamPlayer teamPlayer = team.getTeamPlayer(player);
 
 		if (teamPlayer == null) {
-			Main.plugin.getLogger().severe("For some reason your storage has desynchronised, set `rebuildLookups` to true in config.yml and restart your server");
-			Main.plugin.getLogger().severe("If this keeps occuring after performing this change, please report it as a bug");
+			Main.plugin.getLogger().severe("For some reason your SQLite storage has desynchronised");
+			Main.plugin.getLogger().severe("If this keeps occuring after restarting your server, please report it as a bug");
 		}
 
 		if (checkRank) {

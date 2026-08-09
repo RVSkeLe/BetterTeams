@@ -41,6 +41,8 @@ public class BetterTeamsDatabase extends Database {
 		createTableIfNotExists(TableName.TEAM_META,
 				"teamID VARCHAR(50) NOT NULL, metaKey VARCHAR(255) NOT NULL, metaValue TEXT, PRIMARY KEY(teamID, metaKey), FOREIGN KEY (teamID) REFERENCES "
 						+ TableName.TEAM + "(teamID) ON DELETE CASCADE");
+		createTableIfNotExists(TableName.PLUGIN_DATA,
+				"dataKey VARCHAR(100) NOT NULL PRIMARY KEY, dataValue TEXT");
 
 		// Add anchor columns if they don't exist
 		if (!hasColumn(TableName.TEAM, "anchor")) {
@@ -96,7 +98,7 @@ public class BetterTeamsDatabase extends Database {
 			if (result == null) {
 				return false;
 			}
-			return result.first();
+			return result.next();
 		} catch (SQLException e) {
 			e.printStackTrace();
 			return false;
@@ -117,11 +119,12 @@ public class BetterTeamsDatabase extends Database {
 
 		try (PreparedStatement pr = selectWhere(column, from, where)) {
 			ResultSet results = pr.executeQuery();
-			results.first();
-			return results.getString(column);
+			if (results.next()) {
+				return results.getString(column);
+			}
 		} catch (SQLException e) {
-			return "";
 		}
+		return "";
 
 	}
 
@@ -170,7 +173,7 @@ public class BetterTeamsDatabase extends Database {
 	}
 
 	public void insertRecordIfNotExists(TableName table, String columns, String values) {
-		executeStatement("INSERT IGNORE INTO %s (%s) VALUES (%s);".formatted(table.toString(), columns, values));
+		executeStatement("INSERT OR IGNORE INTO %s (%s) VALUES (%s);".formatted(table.toString(), columns, values));
 	}
 
 }

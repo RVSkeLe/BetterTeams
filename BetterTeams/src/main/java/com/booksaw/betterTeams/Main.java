@@ -35,10 +35,7 @@ import com.booksaw.betterTeams.integrations.placeholder.TeamPlaceholders;
 import com.booksaw.betterTeams.message.MessageManager;
 import com.booksaw.betterTeams.score.ScoreManagement;
 import com.booksaw.betterTeams.team.level.LevelManager;
-import com.booksaw.betterTeams.team.storage.StorageType;
-import com.booksaw.betterTeams.team.storage.convert.Converter;
-import com.booksaw.betterTeams.team.storage.storageManager.SeparatedYamlStorageManager;
-import com.booksaw.betterTeams.team.storage.storageManager.YamlStorageManager;
+import com.booksaw.betterTeams.team.storage.storageManager.SQLiteStorageManager;
 import com.tcoded.folialib.FoliaLib;
 import lombok.Getter;
 import net.kyori.adventure.platform.bukkit.BukkitAudiences;
@@ -48,7 +45,6 @@ import org.bstats.bukkit.Metrics;
 import org.bstats.charts.SimplePie;
 import org.bukkit.Bukkit;
 import org.bukkit.configuration.file.FileConfiguration;
-import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.event.HandlerList;
 import org.bukkit.plugin.RegisteredServiceProvider;
@@ -478,10 +474,10 @@ public class Main extends JavaPlugin {
 			int pluginId = 7855;
 			metrics = new Metrics(this, pluginId);
 			metrics.addCustomChart(new SimplePie("language", () -> getConfig().getString("language")));
-			metrics.addCustomChart(new SimplePie("storage_type", () -> getConfig().getString("storageType")));
+			metrics.addCustomChart(new SimplePie("storage_type", () -> "SQLITE"));
 			metrics.addCustomChart(new SimplePie("team_count", () -> {
-				if (Team.getTeamManager() instanceof SeparatedYamlStorageManager) {
-					return ((((SeparatedYamlStorageManager) Team.getTeamManager()).getTeamNameLookupSize() / 200) * 200) + "+";
+				if (Team.getTeamManager() instanceof SQLiteStorageManager storageManager) {
+					return (((storageManager.getTeamCount() / 200) * 200) + "+");
 
 				}
 				return null;
@@ -496,29 +492,7 @@ public class Main extends JavaPlugin {
 	}
 
 	public void setupStorage() {
-		File f = new File("plugins/BetterTeams/" + YamlStorageManager.TEAMLISTSTORAGELOC + ".yml");
-
-		if (!f.exists()) {
-			Main.plugin.saveResource("teams.yml", false);
-		}
-
-		YamlConfiguration teamStorage = YamlConfiguration.loadConfiguration(f);
-		StorageType from = StorageType.getStorageType(teamStorage.getString("storageType", "FLATFILE"));
-		StorageType to = StorageType.getStorageType(getConfig().getString("storageType", ""));
-
-		if (from != to) {
-			Converter converter = Converter.getConverter(from, to);
-
-			if (converter == null) {
-				Main.plugin.getLogger().info("Cannot convert to the selected storage type (" + to.toString()
-						+ "), continuing with preexisting one (" + from.toString() + ")");
-				to = from;
-			} else {
-				converter.convertStorage();
-			}
-		}
-
-		Team.setupTeamManager(to);
+		Team.setupTeamManager();
 		Team.getTeamManager().loadTeams();
 	}
 

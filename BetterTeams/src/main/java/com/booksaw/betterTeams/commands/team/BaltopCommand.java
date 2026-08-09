@@ -33,7 +33,7 @@ public class BaltopCommand extends SubCommand {
 			for (int i = 0; i < 10 && i < teams.length; i++) {
 				Team tempTeam = Team.getTeam(teams[i]);
 				if (tempTeam == null) {
-					Main.plugin.getLogger().severe("Files are out of sync. Please set `rebuildLookups` to true and restart your server");
+					Main.plugin.getLogger().severe("Could not load team `" + teams[i] + "` from SQLite storage");
 					continue;
 				}
 				MessageManager.sendMessage(sender, "baltop.syntax", i + 1, tempTeam.getName(), tempTeam.getBalance());
