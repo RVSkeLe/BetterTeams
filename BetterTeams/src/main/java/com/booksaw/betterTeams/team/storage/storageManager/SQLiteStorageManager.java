@@ -7,6 +7,8 @@ import com.booksaw.betterTeams.database.BetterTeamsDatabase;
 import com.booksaw.betterTeams.database.TableName;
 import com.booksaw.betterTeams.team.LocationSetComponent;
 import com.booksaw.betterTeams.team.TeamManager;
+import com.booksaw.betterTeams.team.storage.migration.LegacyStorageMigrationException;
+import com.booksaw.betterTeams.team.storage.migration.LegacyStorageMigrator;
 import com.booksaw.betterTeams.team.storage.team.SQLiteTeamStorage;
 import com.booksaw.betterTeams.team.storage.team.TeamStorage;
 import lombok.Getter;
@@ -48,6 +50,13 @@ public class SQLiteStorageManager extends TeamManager implements Listener {
 		database = new BetterTeamsDatabase();
 		database.setupConnectionFromConfiguration();
 		database.setupTables();
+		try {
+			new LegacyStorageMigrator(database).migrateIfNeeded();
+		} catch (LegacyStorageMigrationException e) {
+			Main.plugin.getLogger().severe(e.getMessage());
+			e.printStackTrace();
+			Main.plugin.getServer().getPluginManager().disablePlugin(Main.plugin);
+		}
 	}
 
 	@Override
