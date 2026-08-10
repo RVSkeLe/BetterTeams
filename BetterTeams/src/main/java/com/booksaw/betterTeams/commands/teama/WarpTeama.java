@@ -24,7 +24,7 @@ public class WarpTeama extends SubCommand {
 		if (args.length == 1) {
 
 			StringBuilder replace = new StringBuilder();
-			for (Warp warp : team.getWarps().get()) {
+			for (Warp warp : team.getWarps()) {
 				replace.append(warp.getName()).append(", ");
 			}
 

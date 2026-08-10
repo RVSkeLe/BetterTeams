@@ -58,15 +58,15 @@ public class TeamMessageController {
 	private final Team team;
 
 	public void sendTeamChatMessage(TeamPlayer sender, String message) {
-		Set<TeamPlayer> recipients = team.getMembers().getClone();
+		Set<TeamPlayer> recipients = team.getMembersClone();
 
 		sendTeamMessage(sender, message, recipients, TeamMessageType.TEAM_CHAT_MESSAGE);
 	}
 
 	public void sendAllyChatMessage(TeamPlayer sender, String message) {
-		Set<TeamPlayer> recipients = team.getMembers().getClone();
-		team.getAllies().getClone().stream().map(Team::getTeam).filter(Objects::nonNull)
-				.forEach(team -> recipients.addAll(team.getMembers().getClone()));
+		Set<TeamPlayer> recipients = team.getMembersClone();
+		team.getAlliesClone().stream().map(Team::getTeam).filter(Objects::nonNull)
+				.forEach(team -> recipients.addAll(team.getMembersClone()));
 
 		sendTeamMessage(sender, message, recipients, TeamMessageType.ALLY_CHAT_MESSAGE);
 	}

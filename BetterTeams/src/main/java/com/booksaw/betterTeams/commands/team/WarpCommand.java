@@ -15,7 +15,7 @@ public class WarpCommand extends TeamSubCommand {
 		if (args.length == 0) {
 
 			StringBuilder replace = new StringBuilder();
-			for (Warp warp : team.getWarps().get()) {
+			for (Warp warp : team.getWarps()) {
 				replace.append(warp.getName()).append(", ");
 			}
 
@@ -89,7 +89,7 @@ public class WarpCommand extends TeamSubCommand {
 					return;
 				}
 
-				for (Warp temp : team.getWarps().get()) {
+				for (Warp temp : team.getWarps()) {
 					if (temp.getName().startsWith(args[0])) {
 						options.add(temp.getName());
 					}

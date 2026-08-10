@@ -20,11 +20,11 @@ public class PvpCommand extends TeamSubCommand {
 		if (team.isPvp()) {
 			team.setPvp(false);
 			Message message = new ReferenceMessage("pvp.disabled");
-			team.getMembers().broadcastMessage(message);
+			team.getData().broadcastMessage(message);
 		} else {
 			team.setPvp(true);
 			Message message = new ReferenceMessage("pvp.enabled");
-			team.getMembers().broadcastMessage(message);
+			team.getData().broadcastMessage(message);
 		}
 
 		return new CommandResponse(true);

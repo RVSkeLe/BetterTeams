@@ -2,7 +2,7 @@ package com.booksaw.betterTeams.commands.team.chest;
 
 import com.booksaw.betterTeams.*;
 import com.booksaw.betterTeams.commands.presets.TeamSubCommand;
-import com.booksaw.betterTeams.team.LocationSetComponent;
+import com.booksaw.betterTeams.team.TeamData;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
@@ -20,7 +20,7 @@ public class ChestClaimCommand extends TeamSubCommand {
 		Location loc = Objects.requireNonNull(player.getPlayer().getPlayer()).getLocation();
 
 		Block block = loc.getBlock();
-		loc = LocationSetComponent.normalise(loc);
+		loc = TeamData.normalise(loc);
 
 		if (block.getType() != Material.CHEST) {
 			return new CommandResponse("chest.claim.noChest");

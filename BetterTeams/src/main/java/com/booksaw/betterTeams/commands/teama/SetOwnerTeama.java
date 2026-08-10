@@ -36,7 +36,7 @@ public class SetOwnerTeama extends SubCommand {
 		team.promotePlayerToOwner(tp);
 		MessageManager.sendMessage(p, "admin.setowner.notify");
 
-		for (TeamPlayer player : team.getMembers().getClone()) {
+		for (TeamPlayer player : team.getMembersClone()) {
 			if (player.getRank() == PlayerRank.OWNER) {
 				if (player == tp) {
 					continue;

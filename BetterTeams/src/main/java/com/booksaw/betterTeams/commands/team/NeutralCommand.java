@@ -36,7 +36,7 @@ public class NeutralCommand extends TeamSubCommand {
 			// notifying the other team
 
 			Message message = new ReferencedFormatMessage("neutral.reject", team.getDisplayName());
-			toNeutral.getMembers().broadcastMessage(message);
+			toNeutral.getData().broadcastMessage(message);
 
 			return new CommandResponse(true, "neutral.requestremove");
 		}
@@ -90,7 +90,7 @@ public class NeutralCommand extends TeamSubCommand {
 
 			Set<UUID> knownTeams = null, ignoreTeam = null;
 			if (myTeam != null) {
-				knownTeams = myTeam.getAllies().get();
+				knownTeams = myTeam.getAllies();
 				ignoreTeam = Collections.singleton(myTeam.getID());
 			}
 

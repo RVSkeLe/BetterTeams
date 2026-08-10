@@ -13,7 +13,7 @@ public class OfflineListPlaceholderProvider implements IndividualTeamPlaceholder
 
 	@Override
 	public String getPlaceholderForTeam(Team team) {
-		return team.getMembers().getOfflinePlayersString();
+		return team.getData().getOfflinePlayersString();
 	}
 
 }

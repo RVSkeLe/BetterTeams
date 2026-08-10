@@ -2,6 +2,8 @@ package com.booksaw.betterTeams;
 
 import com.booksaw.betterTeams.customEvents.DemotePlayerEvent;
 import com.booksaw.betterTeams.customEvents.DisbandTeamEvent;
+import com.booksaw.betterTeams.customEvents.PlayerJoinTeamEvent;
+import com.booksaw.betterTeams.customEvents.PlayerLeaveTeamEvent;
 import com.booksaw.betterTeams.customEvents.PromotePlayerEvent;
 import com.booksaw.betterTeams.customEvents.RelationChangeTeamEvent;
 import com.booksaw.betterTeams.customEvents.TeamColorChangeEvent;
@@ -10,6 +12,8 @@ import com.booksaw.betterTeams.customEvents.TeamNameChangeEvent;
 import com.booksaw.betterTeams.customEvents.TeamTagChangeEvent;
 import com.booksaw.betterTeams.customEvents.post.PostDemotePlayerEvent;
 import com.booksaw.betterTeams.customEvents.post.PostDisbandTeamEvent;
+import com.booksaw.betterTeams.customEvents.post.PostPlayerJoinTeamEvent;
+import com.booksaw.betterTeams.customEvents.post.PostPlayerLeaveTeamEvent;
 import com.booksaw.betterTeams.customEvents.post.PostPromotePlayerEvent;
 import com.booksaw.betterTeams.customEvents.post.PostRelationChangeTeamEvent;
 import com.booksaw.betterTeams.customEvents.post.PostTeamColorChangeEvent;
@@ -19,23 +23,13 @@ import com.booksaw.betterTeams.exceptions.CancelledEventException;
 import com.booksaw.betterTeams.message.Message;
 import com.booksaw.betterTeams.message.MessageManager;
 import com.booksaw.betterTeams.message.ReferencedFormatMessage;
-import com.booksaw.betterTeams.team.AllyRequestComponent;
-import com.booksaw.betterTeams.team.AllySetComponent;
-import com.booksaw.betterTeams.team.AnchoredPlayerUUIDSetComponent;
-import com.booksaw.betterTeams.team.AnchoredPlayerUUIDSetComponent.AnchorResult;
-import com.booksaw.betterTeams.team.BanSetComponent;
-import com.booksaw.betterTeams.team.ChestClaimComponent;
-import com.booksaw.betterTeams.team.EChestComponent;
-import com.booksaw.betterTeams.team.LocationSetComponent;
-import com.booksaw.betterTeams.team.MemberSetComponent;
-import com.booksaw.betterTeams.team.MetaComponent;
-import com.booksaw.betterTeams.team.MoneyComponent;
-import com.booksaw.betterTeams.team.ScoreComponent;
+import com.booksaw.betterTeams.team.TeamData;
+import com.booksaw.betterTeams.team.TeamData.AnchorResult;
 import com.booksaw.betterTeams.team.TeamManager;
-import com.booksaw.betterTeams.team.WarpSetComponent;
 import com.booksaw.betterTeams.team.controller.TeamMessageController;
 import com.booksaw.betterTeams.team.level.LevelManager;
 import com.booksaw.betterTeams.team.level.TeamLevel;
+import com.booksaw.betterTeams.team.meta.TeamMeta;
 import com.booksaw.betterTeams.team.storage.storageManager.SQLiteStorageManager;
 import com.booksaw.betterTeams.team.storage.team.StoredTeamValue;
 import com.booksaw.betterTeams.team.storage.team.TeamStorage;
@@ -191,131 +185,18 @@ public class Team {
   @Getter
   private final TeamStorage storage;
 
+  @Getter
+  private final TeamData data = new TeamData();
+
   /**
    * The ID of the team (this is a unique identifier of the team which will never change)
    */
   private final UUID id;
 
-  /**
-   * The name of the team, this can be changed after the creation of a teams, so do not store
-   * references to it
-   */
-  @Getter
-  private String name;
-
-  /**
-   * The description of a team, used in /team info
-   */
-  @Getter
-  private String description;
-
-  /**
-   * If the team is open or invite only
-   * <p>change this to an enum - which is more expressive</p>
-   * [true - anyone can join the team] [false - the team is invite only]
-   */
-  @Getter
-  private boolean open;
-
-  /**
-   * The location of the teams home (/team home)
-   */
-  @Getter
-  private Location teamHome = null;
-
-  /**
-   * tracks and provides utility methods relating to the members of this team
-   */
-  @Getter
-  @NotNull
-  private final MemberSetComponent members = new MemberSetComponent();
-
-  /**
-   * tracks and provides utility methods relating to anchored players of this team
-   */
-  @Getter
-  private final AnchoredPlayerUUIDSetComponent anchoredPlayers = new AnchoredPlayerUUIDSetComponent();
-  /**
-   * the list of all UUIDS of teams that are allied with this team
-   */
-  @Getter
-  private final AllySetComponent allies = new AllySetComponent();
-
-  /**
-   * This is a list of invited players to this team since the last restart of the server
-   */
-  @Getter
-  private final List<UUID> invitedPlayers = new ArrayList<>();
-
-  /**
-   * This is used to store all players which are banned from the team
-   */
-  @Getter
-  private final BanSetComponent bannedPlayers = new BanSetComponent();
-
-  /**
-   * Used to track the chests claimed by this team
-   */
-  private final ChestClaimComponent claims = new ChestClaimComponent();
-
-  /**
-   * The score for the team
-   */
-  private final ScoreComponent score = new ScoreComponent();
-
-  /**
-   * The money that the team has
-   */
-  private final MoneyComponent money = new MoneyComponent();
-
   @Getter
   private final TeamMessageController teamMessageController = new TeamMessageController(this);
 
-  /**
-   * Tracks if the team has pvp enabled between team members
-   */
-  @Getter
-  private boolean pvp = false;
-
-  /*
-   * Decides whether team home will serve as respawn location
-   */
-  private boolean useTeamHomeAsAnchor = false;
-
-  /**
-   * The color of the team
-   */
-  @Getter
-  private ChatColor color = null;
-  /**
-   * the rank of the team
-   */
-  private int rank = -1;
-
-  /**
-   * The rank on baltop of the team
-   */
-  private int balRank;
-
-  /**
-   * Used to track which teams have requested to be allies with this team
-   */
-  private final AllyRequestComponent allyRequests = new AllyRequestComponent();
-
-  private final EChestComponent echest = new EChestComponent();
-
-  @Getter
-  private int level;
-
-  private String tag;
-
-  @Getter
-  private final WarpSetComponent warps = new WarpSetComponent();
-
   private org.bukkit.scoreboard.Team team;
-
-  @Getter
-  private final MetaComponent meta = new MetaComponent();
 
   /**
    * this is used to load a team from the configuration file
@@ -327,59 +208,15 @@ public class Team {
 
     storage = TEAMMANAGER.createTeamStorage(this);
 
-    name = storage.getString(StoredTeamValue.NAME);
+    data.load(storage);
 
-    if (name == null) {
+    if (data.getName() == null) {
       // removing it from the team list, the java GC will handle the reset
       getTeamManager().disbandTeam(this);
 
       throw new IllegalArgumentException(
         "The team that attempted loading is invalid, disbanding the team to avoid problems");
     }
-
-    description = storage.getString(StoredTeamValue.DESCRIPTION);
-    open = storage.getBoolean(StoredTeamValue.OPEN);
-    pvp = storage.getBoolean(StoredTeamValue.PVP);
-    useTeamHomeAsAnchor = storage.getBoolean(StoredTeamValue.ANCHOR);
-
-    String colorStr = Optional.ofNullable(storage.getString(StoredTeamValue.COLOR)).orElse("6");
-
-    if (colorStr.isEmpty()) {
-      colorStr = "6";
-    }
-
-    color = Optional.ofNullable(ChatColor.getByChar(colorStr.charAt(0))).orElse(ChatColor.GOLD);
-
-    members.load(storage);
-    anchoredPlayers.load(storage);
-    allies.load(storage);
-    score.load(storage);
-    money.load(storage);
-    echest.load(storage);
-    bannedPlayers.load(storage);
-    meta.load(storage);
-
-    String teamHomeStr = storage.getString(StoredTeamValue.HOME);
-    if (teamHomeStr != null && !teamHomeStr.isEmpty()) {
-      teamHome = LocationSetComponent.getLocation(teamHomeStr);
-    }
-    allyRequests.load(storage);
-    warps.load(storage);
-
-    try {
-      claims.load(storage);
-    } catch (IllegalArgumentException e) {
-      Main.plugin.getLogger().severe(
-        "Invalid location stored in the file for the team with the ID " + id + ", "
-          + e.getMessage());
-    }
-
-    level = storage.getInt(StoredTeamValue.LEVEL);
-    if (level < 1) {
-      level = 1;
-    }
-
-    tag = Optional.ofNullable(storage.getString(StoredTeamValue.TAG)).orElse("");
   }
 
   /**
@@ -409,45 +246,13 @@ public class Team {
 
     }
 
-    this.name = name;
-
     storage = TEAMMANAGER.createNewTeamStorage(this);
-
-    storage.set(StoredTeamValue.NAME, name);
-    storage.set(StoredTeamValue.DESCRIPTION, "");
-
-    this.description = "";
-
-    storage.set(StoredTeamValue.OPEN, false);
-    open = false;
-
-    storage.set(StoredTeamValue.PVP, false);
-    pvp = false;
-
-    storage.set(StoredTeamValue.ANCHOR, false);
-    useTeamHomeAsAnchor = false;
-
-    storage.set(StoredTeamValue.HOME, "");
-    rank = -1;
-
-    String colorStr = Main.plugin.getConfig().getString("defaultColor", "6");
-    if (colorStr.isEmpty()) {
-      colorStr = "6";
-    }
-    color = Optional.ofNullable(ChatColor.getByChar(colorStr.charAt(0))).orElse(ChatColor.GOLD);
-    storage.set(StoredTeamValue.COLOR, color.getChar());
-
-    claims.save(storage);
+    data.initializeNew(name, storage);
     if (owner != null) {
-      members.add(this, new TeamPlayer(owner, PlayerRank.OWNER));
+      addMember(new TeamPlayer(owner, PlayerRank.OWNER));
     }
-
-    savePlayers();
-    saveAnchoredPlayers();
-    level = 1;
-    storage.set(StoredTeamValue.LEVEL, 1);
-    tag = "";
-    storage.set(StoredTeamValue.TAG, "");
+    data.saveMembers(storage);
+    data.saveAnchoredPlayers(storage);
     /*
      * do not need to save config as createNewTeam saves the config after more
      * settings modified
@@ -461,7 +266,7 @@ public class Team {
    * @param name the new team nametag
    */
   public void setName(String name, Player playerSource) {
-    final String previousName = this.name;
+    final String previousName = data.getName();
 
     TeamNameChangeEvent event = new TeamNameChangeEvent(this, name, playerSource);
     Bukkit.getPluginManager().callEvent(event);
@@ -472,7 +277,7 @@ public class Team {
     name = event.getNewTeamName();
 
     TEAMMANAGER.teamNameChange(this, name);
-    this.name = name;
+    data.setName(name);
     getStorage().set(StoredTeamValue.NAME, name);
 
     registerTeamName();
@@ -484,7 +289,7 @@ public class Team {
   private void registerTeamName() {
     if (Main.plugin.teamManagement != null) {
       if (team != null) {
-        for (TeamPlayer p : members.getClone()) {
+        for (TeamPlayer p : data.getMembersClone()) {
           if (p.getPlayer().isOnline()) {
             team.removeEntry(Objects.requireNonNull(p.getPlayer().getName()));
           }
@@ -494,7 +299,7 @@ public class Team {
 
       team = null;
 
-      for (TeamPlayer p : members.getClone()) {
+      for (TeamPlayer p : data.getMembersClone()) {
         if (p.getPlayer().isOnline()) {
           Main.plugin.teamManagement.displayBelowName(
             Objects.requireNonNull(p.getPlayer().getPlayer()));
@@ -504,11 +309,11 @@ public class Team {
   }
 
   public @NotNull String getOpenColor() {
-    return LegacyTextUtils.colorToAdventure(color.asBungee());
+    return LegacyTextUtils.colorToAdventure(data.getColor().asBungee());
   }
 
   public @NotNull String getCloseColor() {
-    return LegacyTextUtils.colorToAdventure(color.asBungee(), true);
+    return LegacyTextUtils.colorToAdventure(data.getColor().asBungee(), true);
   }
 
   public @NotNull String getAdventureDisplayName() {
@@ -534,7 +339,7 @@ public class Team {
    */
   public @NotNull String getDisplayName(ChatColor resetTo, boolean asAdventure) {
     if (resetTo == null) {
-      return name;
+      return data.getName();
     } else if (asAdventure) {
       return getAdventureDisplayName(true) + LegacyTextUtils.colorToAdventure(resetTo.asBungee());
     } else {
@@ -551,8 +356,8 @@ public class Team {
       return getAdventureDisplayName(true);
     } else {
       return
-        (color != null && Main.plugin.getConfig().getBoolean("colorTeamName", true) ? color : "")
-          + name;
+        (data.getColor() != null && Main.plugin.getConfig().getBoolean("colorTeamName", true) ? data.getColor() : "")
+          + data.getName();
     }
   }
 
@@ -561,12 +366,12 @@ public class Team {
   }
 
   public String getAdventureTag(boolean checkConfig) {
-    if (tag == null || tag.isEmpty()) {
+    if (data.getTag() == null || data.getTag().isEmpty()) {
       return getAdventureDisplayName(checkConfig);
     }
     boolean doColor = !checkConfig || Main.plugin.getConfig().getBoolean("colorTeamName", true);
     return (doColor ? getOpenColor() : "")
-      + tag
+      + data.getTag()
       + (doColor ? getCloseColor() : "");
   }
 
@@ -578,9 +383,9 @@ public class Team {
     if (asAdventure) {
       return getAdventureTag(true);
     } else {
-      return tag == null || tag.isEmpty() ? getDisplayName() :
-        (color != null && Main.plugin.getConfig().getBoolean("colorTeamName", true) ? color : "")
-        + tag;
+      return data.getTag() == null || data.getTag().isEmpty() ? getDisplayName() :
+        (data.getColor() != null && Main.plugin.getConfig().getBoolean("colorTeamName", true) ? data.getColor() : "")
+        + data.getTag();
     }
   }
 
@@ -591,7 +396,7 @@ public class Team {
   public String getTag(ChatColor returnTo, boolean asAdventure) {
     if (returnTo == null) {
       return getOriginalTag();
-    } else if (tag == null || tag.isEmpty()) {
+    } else if (data.getTag() == null || data.getTag().isEmpty()) {
       return getDisplayName(asAdventure);
     } else {
       return getTag(asAdventure) + (asAdventure ? LegacyTextUtils.colorToAdventure(
@@ -600,7 +405,7 @@ public class Team {
   }
 
   public String getOriginalTag() {
-    return tag != null ? tag : "";
+    return data.getTag() != null ? data.getTag() : "";
   }
 
   public void setTag(String tag) {
@@ -614,7 +419,7 @@ public class Team {
     }
     tag = Optional.ofNullable(event.getNewTeamTag()).orElse("");
 
-    this.tag = tag;
+    data.setTag(tag);
     getStorage().set(StoredTeamValue.TAG, tag);
 
     registerTeamName();
@@ -623,7 +428,7 @@ public class Team {
   }
 
   public void setOpen(boolean open) {
-    this.open = open;
+    data.setOpen(open);
     getStorage().set(StoredTeamValue.OPEN, open);
   }
 
@@ -633,7 +438,7 @@ public class Team {
    * @param description the new team description
    */
   public void setDescription(String description) {
-    this.description = description;
+    data.setDescription(description);
     getStorage().set(StoredTeamValue.DESCRIPTION, description);
   }
 
@@ -653,7 +458,7 @@ public class Team {
     color = event.getNewTeamColor();
 
     final ChatColor oldColor = getColor();
-    this.color = color;
+    data.setColor(color);
     getStorage().set(StoredTeamValue.COLOR, color.getChar());
 
     registerTeamName();
@@ -665,21 +470,21 @@ public class Team {
    * Used to save the members list to the configuration file
    */
   private void savePlayers() {
-    members.save(getStorage());
+    data.saveMembers(getStorage());
   }
 
   /**
    * Used to save anchored players in this team
    */
   private void saveAnchoredPlayers() {
-    anchoredPlayers.save(getStorage());
+    data.saveAnchoredPlayers(getStorage());
   }
 
   /**
    * Used to save the bans list to the configuration file
    */
   private void saveBans() {
-    bannedPlayers.save(getStorage());
+    data.saveBans(getStorage());
   }
 
   /**
@@ -702,14 +507,23 @@ public class Team {
    */
   public boolean removePlayer(TeamPlayer p) {
     try {
-      members.remove(this, p);
+      PlayerLeaveTeamEvent event = new PlayerLeaveTeamEvent(this, p);
+      Bukkit.getPluginManager().callEvent(event);
+      if (event.isCancelled()) {
+        throw new CancelledEventException(event);
+      }
     } catch (CancelledEventException e) {
       return false;
     }
 
+    if (Main.plugin.teamManagement != null && p.getPlayer().isOnline()) {
+      Main.plugin.teamManagement.remove(p.getPlayer().getPlayer());
+    }
+    getTeamManager().playerLeaveTeam(this, p);
+    data.removeMember(p);
     savePlayers();
     if (p.isAnchored()) {
-      anchoredPlayers.remove(this, p.getPlayerUUID());
+      data.unanchorPlayer(p);
       saveAnchoredPlayers();
     }
     Optional<Player> onlinePlayerOpt = p.getOnlinePlayer();
@@ -717,7 +531,7 @@ public class Team {
       Player onlinePlayer = onlinePlayerOpt.get();
 
       if (onlinePlayer.getOpenInventory().getTopInventory().getHolder()
-        instanceof EChestComponent.EchestInventoryHolder) {
+        instanceof TeamData.EchestInventoryHolder) {
 
         Main.plugin.getFoliaLib().getScheduler().runLater(() -> onlinePlayer.closeInventory(), 1L);
       }
@@ -727,6 +541,7 @@ public class Team {
       Main.plugin.teamManagement.remove(p.getPlayer().getPlayer());
     }
 
+    Bukkit.getPluginManager().callEvent(new PostPlayerLeaveTeamEvent(this, p));
     return true;
   }
 
@@ -740,7 +555,7 @@ public class Team {
    * @param p the team player
    */
   public boolean isPlayerAnchored(TeamPlayer p) {
-    return anchoredPlayers.getClone().contains(p.getPlayerUUID());
+    return data.isPlayerAnchored(p);
   }
 
   public AnchorResult setPlayerAnchor(OfflinePlayer p, boolean anchor) {
@@ -758,7 +573,7 @@ public class Team {
    * @return AnchorResult
    */
   public AnchorResult anchorPlayer(TeamPlayer p) {
-    AnchorResult result = anchoredPlayers.add(this, p);
+    AnchorResult result = data.anchorPlayer(p);
     if (result == AnchorResult.SUCCESS) {
       getStorage().setAnchor(p, true);
       saveAnchoredPlayers();
@@ -773,7 +588,7 @@ public class Team {
    * @return AnchorResult
    */
   public AnchorResult unanchorPlayer(TeamPlayer p) {
-    AnchorResult result = anchoredPlayers.remove(this, p);
+    AnchorResult result = data.unanchorPlayer(p);
     if (result == AnchorResult.SUCCESS) {
       getStorage().setAnchor(p, false);
       saveAnchoredPlayers();
@@ -792,7 +607,7 @@ public class Team {
     if (player == null) {
       return null;
     }
-    return members.getTeamPlayer(player);
+    return data.getTeamPlayer(player);
   }
 
   /**
@@ -802,7 +617,7 @@ public class Team {
    * @return a list of players which have that rank [empty list - no players have that rank]
    */
   public List<TeamPlayer> getRank(PlayerRank rank) {
-    return members.getRank(rank);
+    return data.getRank(rank);
   }
 
   /**
@@ -826,8 +641,8 @@ public class Team {
     }
 
     // I've got to store this here, because otherwise the team information is gone.
-    final Set<UUID> alliesClone = allies.getClone();
-    final Set<TeamPlayer> membersClone = members.getClone();
+    final Set<UUID> alliesClone = data.getAlliesClone();
+    final Set<TeamPlayer> membersClone = data.getMembersClone();
 
     alliesClone.forEach(uuid -> {
       Team team = Team.getTeam(uuid);
@@ -867,7 +682,7 @@ public class Team {
    * @return [true - the player is invited] [false - the player is not invited]
    */
   public boolean isInvited(UUID uuid) {
-    for (UUID temp : invitedPlayers) {
+    for (UUID temp : data.getInvitedPlayers()) {
       if (temp.compareTo(uuid) == 0) {
         return true;
       }
@@ -881,7 +696,7 @@ public class Team {
    * @param uniqueId the UUID of the player being invited
    */
   public void invite(UUID uniqueId) {
-    invitedPlayers.add(uniqueId);
+    data.getInvitedPlayers().add(uniqueId);
 
     int invite = Main.plugin.getConfig().getInt("invite");
 
@@ -894,7 +709,7 @@ public class Team {
       if (p == null || getTeamPlayer(p) != null) {
         return;
       }
-      invitedPlayers.remove(uniqueId);
+      data.getInvitedPlayers().remove(uniqueId);
       MessageManager.sendMessage(p, "invite.expired", getName());
     }, invite * 20L);
   }
@@ -907,13 +722,45 @@ public class Team {
    */
   public boolean join(Player p) {
     try {
-      members.add(this, new TeamPlayer(p, PlayerRank.DEFAULT));
+      addMember(new TeamPlayer(p, PlayerRank.DEFAULT));
     } catch (CancelledEventException e) {
       return false;
     }
     savePlayers();
     return true;
 
+  }
+
+  private void addMember(TeamPlayer teamPlayer) {
+    PlayerJoinTeamEvent event = new PlayerJoinTeamEvent(this, teamPlayer);
+    Bukkit.getPluginManager().callEvent(event);
+    if (event.isCancelled()) {
+      throw new CancelledEventException(event);
+    }
+
+    OfflinePlayer offlinePlayer = teamPlayer.getPlayer();
+    data.getInvitedPlayers().remove(offlinePlayer.getUniqueId());
+    getTeamManager().playerJoinTeam(this, teamPlayer);
+    data.addMember(teamPlayer);
+
+    Player onlinePlayer = offlinePlayer.getPlayer();
+    if (offlinePlayer.isOnline() && onlinePlayer != null) {
+      for (TeamPlayer player : data.getMembers()) {
+        if (player.getPlayer().isOnline()) {
+          MessageManager.sendMessage(player.getPlayer().getPlayer(), "join.notify", onlinePlayer.getDisplayName());
+        }
+      }
+
+      if (Main.plugin.teamManagement != null) {
+        Main.plugin.teamManagement.displayBelowName(onlinePlayer);
+      }
+    }
+
+    if (offlinePlayer.isOnline() && onlinePlayer != null && onlinePlayer.hasPermission("betterteams.anchor.allowonjoin")) {
+      setPlayerAnchor(teamPlayer, true);
+    }
+
+    Bukkit.getPluginManager().callEvent(new PostPlayerJoinTeamEvent(this, teamPlayer));
   }
 
   /**
@@ -989,14 +836,14 @@ public class Team {
   }
 
   public void setTeamHome(Location teamHome) {
-    this.teamHome = teamHome;
-    getStorage().set(StoredTeamValue.HOME, LocationSetComponent.getString(teamHome));
+    data.setTeamHome(teamHome);
+    getStorage().set(StoredTeamValue.HOME, TeamData.locationToString(teamHome));
   }
 
   public void deleteTeamHome() {
-    teamHome = null;
+    data.setTeamHome(null);
     getStorage().set(StoredTeamValue.HOME, "");
-    if (useTeamHomeAsAnchor) {
+    if (data.isUseTeamHomeAsAnchor()) {
       setAnchored(false);
     }
   }
@@ -1007,7 +854,8 @@ public class Team {
    * @param player the player to add to the list
    */
   public void banPlayer(OfflinePlayer player) {
-    bannedPlayers.add(this, player.getUniqueId());
+    data.addBan(player.getUniqueId());
+    getStorage().addBan(player.getUniqueId());
     saveBans();
   }
 
@@ -1017,7 +865,8 @@ public class Team {
    * @param player the player to remove from the list
    */
   public void unbanPlayer(OfflinePlayer player) {
-    bannedPlayers.remove(this, player.getUniqueId());
+    data.removeBan(player.getUniqueId());
+    getStorage().removeBan(player.getUniqueId());
     saveBans();
   }
 
@@ -1028,7 +877,7 @@ public class Team {
    * @return [true - the player is banned] [false - the player isn't banned]
    */
   public boolean isBanned(OfflinePlayer player) {
-    return bannedPlayers.contains(player);
+    return data.isBanned(player);
   }
 
   /**
@@ -1080,48 +929,44 @@ public class Team {
   }
 
   public int getScore() {
-    return score.get();
-  }
-
-  public ScoreComponent getScoreComponent() {
-    return score;
+    return data.getScore();
   }
 
   public void setScore(int score) {
-    this.score.set(score);
-    this.score.save(getStorage());
+    data.setScore(score);
+    getStorage().set(StoredTeamValue.SCORE, data.getScore());
   }
 
   public double getMoney() {
-    return money.get();
+    return data.getMoney();
   }
 
-  public MoneyComponent getMoneyComponent() {
-    return money;
+  public String getMoneyShortFormatted() {
+    return data.getMoneyShortFormatted();
   }
 
   public void setMoney(double money) {
-    this.money.set(money);
-    this.money.save(getStorage());
+    data.setMoney(money);
+    getStorage().set(StoredTeamValue.MONEY, data.getMoney());
   }
 
   /**
    * @return the rank of the team (-1 if the team has not been ranked)
    */
   public int getTeamRank() {
-    return rank;
+    return data.getRank();
   }
 
   public void setTeamRank(int rank) {
-    this.rank = rank;
+    data.setRank(rank);
   }
 
   public void setTeamBalRank(int rank) {
-    this.balRank = rank;
+    data.setBalRank(rank);
   }
 
   public int getTeamBalRank() {
-    return balRank;
+    return data.getBalRank();
   }
 
   /**
@@ -1135,7 +980,7 @@ public class Team {
       return team;
     }
 
-    String name = color + LegacyTextUtils.parseAllAdventure(
+    String name = data.getColor() + LegacyTextUtils.parseAllAdventure(
       MessageManager.getMessage("nametag.syntax", getTag(ChatColor.RESET, false)));
 
     int attempt = 0;
@@ -1185,7 +1030,7 @@ public class Team {
   }
 
   public String getBalance() {
-    return money.getStringFormatting();
+    return data.getMoneyFormatted();
   }
 
   public void setTitle(TeamPlayer player, String title) {
@@ -1225,18 +1070,19 @@ public class Team {
       return;
     }
 
-    allies.add(this, otherTeam);
+    data.addAlly(otherTeam);
+    getStorage().addAlly(otherTeam);
     saveAllies();
 
     List<String> channelsToUse = Main.plugin.getConfig().getStringList("onAllyMessageChannel");
     final String displayName = getTeam(otherTeam).getDisplayName();
     if (channelsToUse.isEmpty() || channelsToUse.contains("CHAT")) {
       Message message = new ReferencedFormatMessage("ally.ally", displayName);
-      getMembers().broadcastMessage(message);
+      data.broadcastMessage(message);
     }
     if (channelsToUse.isEmpty() || channelsToUse.contains("TITLE")) {
       Message message = new ReferencedFormatMessage("ally.ally_title", displayName);
-      getMembers().broadcastTitle(message);
+      data.broadcastTitle(message);
     }
 
     if (sendPostEvent) {
@@ -1287,7 +1133,8 @@ public class Team {
       return;
     }
 
-    allies.remove(this, otherTeam);
+    data.removeAlly(otherTeam);
+    getStorage().removeAlly(otherTeam);
     saveAllies();
 
     List<String> channelsToUse;
@@ -1297,10 +1144,10 @@ public class Team {
     titleMessage = new ReferencedFormatMessage("neutral.remove_title", other.getDisplayName());
 
     if (channelsToUse.isEmpty() || channelsToUse.contains("CHAT")) {
-      getMembers().broadcastMessage(chatMessage);
+      data.broadcastMessage(chatMessage);
     }
     if (channelsToUse.isEmpty() || channelsToUse.contains("TITLE")) {
-      getMembers().broadcastTitle(titleMessage);
+      data.broadcastTitle(titleMessage);
     }
 
     if (sendPostEvent) {
@@ -1330,7 +1177,7 @@ public class Team {
    * @return if the team is an ally
    */
   public boolean isAlly(UUID team) {
-    return allies.contains(team);
+    return data.getAllies().contains(team);
   }
 
   /**
@@ -1354,7 +1201,7 @@ public class Team {
    * @return if the team is neutral
    */
   public boolean isNeutral(UUID team) {
-    return !allies.contains(team);
+    return !data.getAllies().contains(team);
   }
 
   public boolean isNeutral(@Nullable Team team) {
@@ -1371,7 +1218,8 @@ public class Team {
    * @param team the team that has sent the request
    */
   public void addAllyRequest(UUID team) {
-    allyRequests.add(this, team);
+    data.addAllyRequest(team);
+    getStorage().addAllyRequest(team);
     saveAllyRequests();
   }
 
@@ -1394,7 +1242,8 @@ public class Team {
    * @param team the team to remove the ally request for
    */
   public void removeAllyRequest(UUID team) {
-    allyRequests.remove(this, team);
+    data.removeAllyRequest(team);
+    getStorage().removeAllyRequest(team);
     saveAllyRequests();
   }
 
@@ -1418,7 +1267,7 @@ public class Team {
    * @return if they have sent an ally request
    */
   public boolean hasRequested(UUID team) {
-    return allyRequests.contains(team);
+    return data.getAllyRequests().contains(team);
   }
 
   /**
@@ -1439,25 +1288,81 @@ public class Team {
    * @return the set of all UUIDS of teams that have sent ally requests
    */
   public Set<UUID> getAllyRequests() {
-    return allyRequests.get();
+    return data.getAllyRequests();
   }
 
   /**
    * Used to save the list of allies for this team
    */
   private void saveAllies() {
-    allies.save(getStorage());
+    data.saveAllies(getStorage());
   }
 
   /**
    * Used to save the list of requests for allies for this team
    */
   private void saveAllyRequests() {
-    allyRequests.save(storage);
+    data.saveAllyRequests(storage);
   }
 
   public UUID getID() {
     return id;
+  }
+
+  public String getName() {
+    return data.getName();
+  }
+
+  public String getDescription() {
+    return data.getDescription();
+  }
+
+  public boolean isOpen() {
+    return data.isOpen();
+  }
+
+  public Location getTeamHome() {
+    return data.getTeamHome();
+  }
+
+  public Set<TeamPlayer> getMembers() {
+    return data.getMembers();
+  }
+
+  public Set<TeamPlayer> getMembersClone() {
+    return data.getMembersClone();
+  }
+
+  public Set<UUID> getAllies() {
+    return data.getAllies();
+  }
+
+  public Set<UUID> getAlliesClone() {
+    return data.getAlliesClone();
+  }
+
+  public List<UUID> getInvitedPlayers() {
+    return data.getInvitedPlayers();
+  }
+
+  public Set<Warp> getWarps() {
+    return data.getWarps();
+  }
+
+  public TeamMeta getMeta() {
+    return data.getMeta();
+  }
+
+  public ChatColor getColor() {
+    return data.getColor();
+  }
+
+  public boolean isPvp() {
+    return data.isPvp();
+  }
+
+  public int getLevel() {
+    return data.getLevel();
   }
 
   /**
@@ -1488,7 +1393,7 @@ public class Team {
     boolean disallow;
 
     if (isProtected) {
-      if (pvp && team.pvp) {
+      if (data.isPvp() && team.isPvp()) {
         disallow = false;
       } else if (Main.plugin.wgManagement != null) {
         disallow = !Main.plugin.wgManagement.canTeamPvp(source);
@@ -1533,7 +1438,7 @@ public class Team {
    */
   public boolean canDamage(Team team) {
     if (team.isAlly(getID()) || team == this) {
-      return pvp && team.pvp;
+      return data.isPvp() && team.isPvp();
     }
     return true;
   }
@@ -1544,14 +1449,14 @@ public class Team {
       return false;
     }
 
-    return allies.size() >= limit;
+    return data.getAllies().size() >= limit;
   }
 
   /**
    * Used to save all warps that this team has set
    */
   public void saveWarps() {
-    warps.save(storage);
+    data.saveWarps(storage);
   }
 
   /**
@@ -1561,16 +1466,19 @@ public class Team {
    * @return the warp with that name
    */
   public Warp getWarp(String name) {
-    return warps.get(name);
+    return data.getWarp(name);
   }
 
   public void addWarp(Warp warp) {
-    warps.add(this, warp);
+    data.addWarp(warp);
+    getStorage().addWarp(warp);
     saveWarps();
   }
 
   public void delWarp(String name) {
-    warps.remove(this, getWarp(name));
+    Warp warp = getWarp(name);
+    data.removeWarp(warp);
+    getStorage().removeWarp(warp);
     saveWarps();
   }
 
@@ -1580,7 +1488,7 @@ public class Team {
    * @return a list of online members for this team
    */
   public List<Player> getOnlineMembers() {
-    return members.getOnlinePlayers();
+    return data.getOnlinePlayers();
   }
 
   // CHEST CLAIM COMPONENT
@@ -1591,7 +1499,8 @@ public class Team {
    * @param location The location of the chest claim (round to the nearest block)
    */
   public void addClaim(Location location) {
-    claims.add(this, location);
+    data.addClaim(location);
+    Team.getTeamManager().addChestClaim(this, location);
     saveClaims();
   }
 
@@ -1601,37 +1510,37 @@ public class Team {
    * @param location The location of the chest claim (round to the nearest block)
    */
   public void removeClaim(Location location) {
-    claims.remove(this, location);
+    data.removeClaim(location);
+    Team.getTeamManager().removeChestclaim(location);
     saveClaims();
   }
 
   public void clearClaims() {
-    claims.clear();
+    for (Location location : data.getClaimsClone()) {
+      Team.getTeamManager().removeChestclaim(location);
+    }
+    data.clearClaims();
     saveClaims();
   }
 
   public int getClaimCount() {
-    return claims.size();
+    return data.getClaimCount();
   }
 
   public boolean isClaimed(Location location) {
-    return claims.contains(location);
+    return data.isClaimed(location);
   }
 
   private void saveClaims() {
-    claims.save(getStorage());
+    data.saveClaims(getStorage());
   }
 
   public void saveEchest() {
-    echest.save(getStorage());
+    data.saveEchest(getStorage());
   }
 
   public Inventory getEchest() {
-    return echest.get();
-  }
-
-  public EChestComponent getEchestComponent() {
-    return echest;
+    return data.getEchest();
   }
 
   public int getMaxWarps() {
@@ -1643,13 +1552,13 @@ public class Team {
   }
 
   public void setLevel(int level) {
-    this.level = level;
+    data.setLevel(level);
     getStorage().set(StoredTeamValue.LEVEL, level);
 
   }
 
   public void setPvp(boolean pvp) {
-    this.pvp = pvp;
+    data.setPvp(pvp);
     getStorage().set(StoredTeamValue.PVP, pvp);
 
   }
@@ -1660,20 +1569,20 @@ public class Team {
    * @return false if trying to anchor the team and its home is not set, true otherwise
    */
   public boolean toggleAnchor() {
-    return setAnchored(!useTeamHomeAsAnchor);
+    return setAnchored(!data.isUseTeamHomeAsAnchor());
   }
 
   public boolean setAnchored(boolean anchor) {
-    if (anchor && teamHome == null) {
+    if (anchor && data.getTeamHome() == null) {
       return false;
     }
-    this.useTeamHomeAsAnchor = anchor;
+    data.setUseTeamHomeAsAnchor(anchor);
     getStorage().set(StoredTeamValue.ANCHOR, anchor);
     return true;
   }
 
   public boolean isAnchored() {
-    return useTeamHomeAsAnchor;
+    return data.isUseTeamHomeAsAnchor();
   }
 
   public double getMaxMoney() {
@@ -1734,16 +1643,16 @@ public class Team {
   }
 
   public void setAndSaveMeta(String key, String value) {
-    getMeta().get().set(key, value);
-    getStorage().saveMeta(getMeta().get());
+    data.getMeta().set(key, value);
+    data.saveMeta(getStorage());
   }
 
   public void removeAndSaveMeta(String key) {
-    getMeta().get().remove(key);
-    getStorage().saveMeta(getMeta().get());
+    data.getMeta().remove(key);
+    data.saveMeta(getStorage());
   }
 
   public TeamLevel getLevelObject() {
-    return LevelManager.getLevel(this.level);
+    return LevelManager.getLevel(data.getLevel());
   }
 }

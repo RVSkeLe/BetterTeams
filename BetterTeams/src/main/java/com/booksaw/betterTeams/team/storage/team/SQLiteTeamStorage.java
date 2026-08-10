@@ -1,29 +1,50 @@
 package com.booksaw.betterTeams.team.storage.team;
 
-import com.booksaw.betterTeams.*;
+import com.booksaw.betterTeams.Main;
+import com.booksaw.betterTeams.PlayerRank;
+import com.booksaw.betterTeams.Team;
+import com.booksaw.betterTeams.TeamPlayer;
+import com.booksaw.betterTeams.Utils;
+import com.booksaw.betterTeams.Warp;
 import com.booksaw.betterTeams.database.TableName;
 import com.booksaw.betterTeams.team.meta.TeamMeta;
 import com.booksaw.betterTeams.team.storage.storageManager.SQLiteStorageManager;
 import org.bukkit.Bukkit;
 import org.bukkit.inventory.Inventory;
 
+import java.nio.charset.StandardCharsets;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
 
 public class SQLiteTeamStorage extends TeamStorage {
 
 	private final SQLiteStorageManager storageManager;
+	private final Map<String, Object> values = new HashMap<>();
+	private final Map<UUID, StoredPlayer> players = new LinkedHashMap<>();
+	private final Set<String> bans = new HashSet<>();
+	private final Set<String> allies = new HashSet<>();
+	private final Set<String> allyRequests = new HashSet<>();
+	private final Set<String> warps = new HashSet<>();
+	private final Set<String> claimedChests = new HashSet<>();
+	private final Map<String, String> meta = new HashMap<>();
 
-	public SQLiteTeamStorage(SQLiteStorageManager storageManager, Team team) {
+	private byte[] echest;
+	private boolean dirty;
+
+	public SQLiteTeamStorage(SQLiteStorageManager storageManager, Team team, boolean newTeam) {
 		super(team);
 		this.storageManager = storageManager;
-	}
-
-	public void invalidateCache() {
-		if (Main.placeholderAPI) {
-			Main.plugin.getTeamPlaceholders().invalidateCache();
+		if (!newTeam) {
+			loadFromDatabase();
 		}
 	}
 
@@ -31,388 +52,474 @@ public class SQLiteTeamStorage extends TeamStorage {
 		return "teamID LIKE '" + team.getID() + "'";
 	}
 
-	@Override
-	protected void setValue(String location, TeamStorageType storageType, Object value) {
-		storageManager.getDatabase().updateRecordWhere(TableName.TEAM, location, value,
-				getCondition());
-	}
+	private void loadFromDatabase() {
+		try (PreparedStatement ps = storageManager.getDatabase().selectWhere("*", TableName.TEAM, getCondition())) {
+			ResultSet result = ps.executeQuery();
+			if (!result.next()) {
+				return;
+			}
 
-	@Override
-	public String getString(String reference) {
-		return storageManager.getDatabase().getResult(reference, TableName.TEAM, getCondition());
-	}
-
-	@Override
-	public boolean getBoolean(String reference) {
-		String result = storageManager.getDatabase().getResult(reference, TableName.TEAM, getCondition());
-		if (result.equals("1")) {
-			return true;
-		} else if (result.equals("0")) {
-			return false;
+			putLoaded(StoredTeamValue.NAME.getReference(), result.getString("name"));
+			putLoaded(StoredTeamValue.DESCRIPTION.getReference(), result.getString("description"));
+			putLoaded(StoredTeamValue.OPEN.getReference(), result.getBoolean("open"));
+			putLoaded(StoredTeamValue.SCORE.getReference(), result.getInt("score"));
+			putLoaded(StoredTeamValue.MONEY.getReference(), result.getDouble("money"));
+			putLoaded(StoredTeamValue.HOME.getReference(), result.getString("home"));
+			putLoaded(StoredTeamValue.COLOR.getReference(), result.getString("color"));
+			putLoaded(StoredTeamValue.LEVEL.getReference(), result.getInt("level"));
+			putLoaded(StoredTeamValue.TAG.getReference(), result.getString("tag"));
+			putLoaded(StoredTeamValue.PVP.getReference(), result.getBoolean("pvp"));
+			putLoaded(StoredTeamValue.ANCHOR.getReference(), result.getBoolean("anchor"));
+			echest = result.getBytes("echest");
+		} catch (SQLException e) {
+			e.printStackTrace();
 		}
-		return Boolean.parseBoolean(result);
+
+		loadPlayers();
+		loadSimpleSet(TableName.BANS, "playerUUID", bans);
+		loadAllies();
+		loadAllyRequests();
+		loadSimpleSet(TableName.WARPS, "warpInfo", warps);
+		loadSimpleSet(TableName.CHESTCLAIMS, "chestLoc", claimedChests);
+		loadMeta();
 	}
 
-	@Override
-	public double getDouble(String reference) {
-		return Double.parseDouble(storageManager.getDatabase().getResult(reference, TableName.TEAM, getCondition()));
+	private void putLoaded(String key, Object value) {
+		if (value != null) {
+			values.put(key, value);
+		}
 	}
 
-	@Override
-	public int getInt(String reference) {
-		return Integer.parseInt(storageManager.getDatabase().getResult(reference, TableName.TEAM, getCondition()));
-	}
-
-	@Override
-	public List<TeamPlayer> getPlayerList() {
-		List<TeamPlayer> toReturn = new ArrayList<>();
-
+	private void loadPlayers() {
 		try (PreparedStatement ps = storageManager.getDatabase().selectWhere("*", TableName.PLAYERS, getCondition())) {
 			ResultSet result = ps.executeQuery();
-			if (!result.next()) {
-				return toReturn;
+			while (result.next()) {
+				UUID playerUuid = UUID.fromString(result.getString("playerUUID"));
+				players.put(playerUuid, new StoredPlayer(playerUuid, result.getInt("playerRank"),
+						result.getString("title"), result.getBoolean("anchor")));
 			}
-			do {
-
-				toReturn.add(new TeamPlayer(Bukkit.getOfflinePlayer(UUID.fromString(result.getString("playerUUID"))),
-						PlayerRank.getRank((result.getInt("playerRank"))), result.getString("title"),
-						result.getBoolean("anchor")));
-
-			} while (result.next());
 		} catch (SQLException e) {
 			e.printStackTrace();
 		}
-
-		return toReturn;
 	}
 
-	@Override
-	public List<UUID> getAnchoredPlayerList() {
-		List<UUID> toReturn = new ArrayList<>();
-
-		try (PreparedStatement ps = storageManager.getDatabase().selectWhere("*", TableName.PLAYERS, getCondition())) {
+	private void loadSimpleSet(TableName tableName, String column, Set<String> target) {
+		try (PreparedStatement ps = storageManager.getDatabase().selectWhere(column, tableName, getCondition())) {
 			ResultSet result = ps.executeQuery();
-			if (!result.next()) {
-				return toReturn;
+			while (result.next()) {
+				target.add(result.getString(column));
 			}
-			do {
-				if (result.getBoolean("anchor"))
-					toReturn.add(UUID.fromString(result.getString("playerUUID")));
-			} while (result.next());
 		} catch (SQLException e) {
 			e.printStackTrace();
 		}
-
-		return toReturn;
 	}
 
-	@Override
-	public List<String> getBanList() {
-
-		List<String> toReturn = new ArrayList<>();
-
-		try (PreparedStatement ps = storageManager.getDatabase().selectWhere("*", TableName.BANS, getCondition())) {
+	private void loadAllies() {
+		String teamId = team.getID().toString();
+		try (PreparedStatement ps = storageManager.getDatabase().selectWhere("*", TableName.ALLIES,
+				"team1ID LIKE '" + teamId + "' OR team2ID LIKE '" + teamId + "'")) {
 			ResultSet result = ps.executeQuery();
-			if (!result.next()) {
-				return toReturn;
+			while (result.next()) {
+				String team1 = result.getString("team1ID");
+				allies.add(team1.equals(teamId) ? result.getString("team2ID") : team1);
 			}
-			do {
-
-				toReturn.add(result.getString("playerUUID"));
-
-			} while (result.next());
 		} catch (SQLException e) {
 			e.printStackTrace();
 		}
-
-		return toReturn;
 	}
 
-	private List<String> getTeamList(final TableName table) {
-
-		List<String> toReturn = new ArrayList<>();
-
-		try (PreparedStatement ps = storageManager.getDatabase().selectWhere("*", table,
-				"team1ID LIKE '" + team.getID() + "' OR team2ID LIKE '" + team.getID() + "'")) {
-			ResultSet result = ps.executeQuery();
-			if (!result.next()) {
-				return toReturn;
-			}
-			do {
-				String t1 = result.getString("team1ID");
-				String toAdd = (t1.equals(team.getID().toString())) ? result.getString("team2ID") : t1;
-				if (!toReturn.contains(toAdd)) {
-					toReturn.add(toAdd);
-				}
-
-			} while (result.next());
-		} catch (SQLException e) {
-			e.printStackTrace();
-		}
-
-		return toReturn;
-	}
-
-	@Override
-	public List<String> getAllyList() {
-		return getTeamList(TableName.ALLIES);
-	}
-
-	@Override
-	public List<String> getAllyRequestList() {
-
-		List<String> toReturn = new ArrayList<>();
-
+	private void loadAllyRequests() {
 		try (PreparedStatement ps = storageManager.getDatabase().selectWhere("*", TableName.ALLYREQUESTS,
 				"receivingTeamID LIKE '" + team.getID() + "'")) {
-
 			ResultSet result = ps.executeQuery();
-			if (!result.next()) {
-				return toReturn;
+			while (result.next()) {
+				allyRequests.add(result.getString("requestingTeamID"));
 			}
-			do {
-				toReturn.add(result.getString("requestingTeamID"));
-
-			} while (result.next());
 		} catch (SQLException e) {
 			e.printStackTrace();
 		}
+	}
 
+	private void loadMeta() {
+		try (PreparedStatement ps = storageManager.getDatabase().selectWhere("*", TableName.TEAM_META,
+				"teamID = '" + team.getID() + "'")) {
+			ResultSet result = ps.executeQuery();
+			while (result.next()) {
+				meta.put(result.getString("metaKey"), result.getString("metaValue"));
+			}
+		} catch (SQLException e) {
+			e.printStackTrace();
+		}
+	}
+
+	private void markDirty() {
+		dirty = true;
+		invalidateCache();
+	}
+
+	public synchronized void invalidateCache() {
+		if (Main.placeholderAPI) {
+			Main.plugin.getTeamPlaceholders().invalidateCache();
+		}
+	}
+
+	@Override
+	protected synchronized void setValue(String location, TeamStorageType storageType, Object value) {
+		if (value == null) {
+			values.remove(location);
+		} else {
+			values.put(location, value);
+		}
+		markDirty();
+	}
+
+	@Override
+	public synchronized String getString(String reference) {
+		Object value = values.get(reference);
+		return value == null ? null : value.toString();
+	}
+
+	@Override
+	public synchronized boolean getBoolean(String reference) {
+		Object value = values.get(reference);
+		if (value instanceof Boolean bool) {
+			return bool;
+		}
+		if (value instanceof Number number) {
+			return number.intValue() != 0;
+		}
+		if ("1".equals(value)) {
+			return true;
+		}
+		if ("0".equals(value)) {
+			return false;
+		}
+		return Boolean.parseBoolean(String.valueOf(value));
+	}
+
+	@Override
+	public synchronized double getDouble(String reference) {
+		Object value = values.get(reference);
+		if (value instanceof Number number) {
+			return number.doubleValue();
+		}
+		return value == null ? 0 : Double.parseDouble(value.toString());
+	}
+
+	@Override
+	public synchronized int getInt(String reference) {
+		Object value = values.get(reference);
+		if (value instanceof Number number) {
+			return number.intValue();
+		}
+		return value == null ? 0 : Integer.parseInt(value.toString());
+	}
+
+	@Override
+	public synchronized List<TeamPlayer> getPlayerList() {
+		List<TeamPlayer> toReturn = new ArrayList<>();
+		for (StoredPlayer player : players.values()) {
+			toReturn.add(player.toTeamPlayer());
+		}
 		return toReturn;
 	}
 
 	@Override
-	public void getEchestContents(Inventory inventory) {
-
-		try (PreparedStatement ps = storageManager.getDatabase().selectWhere("echest", TableName.TEAM, getCondition())) {
-			ResultSet result = ps.executeQuery();
-			if (!result.next()) {
-				return;
+	public synchronized List<UUID> getAnchoredPlayerList() {
+		List<UUID> toReturn = new ArrayList<>();
+		for (StoredPlayer player : players.values()) {
+			if (player.anchor()) {
+				toReturn.add(player.uuid());
 			}
-
-			byte[] data = result.getBytes("echest");
-			if (data == null || data.length == 0) {
-				return;
-			}
-
-			try {
-				Utils.deserializeItemsIntoInventory(inventory, data);
-			} catch (RuntimeException e) {
-				String legacyData = result.getString("echest");
-				if (legacyData == null || legacyData.isEmpty()) {
-					throw e;
-				}
-				Utils.deserializeIntoInventory(inventory, legacyData);
-			}
-		} catch (SQLException e) {
-			e.printStackTrace();
 		}
-	}
-
-	@Override
-	public void setEchestContents(Inventory inventory) {
-		byte[] serial = Utils.serializeInventoryAsBytes(inventory);
-		invalidateCache();
-		storageManager.getDatabase().executeStatement("UPDATE %s SET echest = ? WHERE %s".formatted(TableName.TEAM.toString(), getCondition()), serial);
-
-	}
-
-	@Override
-	public List<String> getWarps() {
-
-		List<String> toReturn = new ArrayList<>();
-
-		try (PreparedStatement ps = storageManager.getDatabase().selectWhere("*", TableName.WARPS, getCondition())) {
-
-			ResultSet result = ps.executeQuery();
-			if (!result.next()) {
-				return toReturn;
-			}
-			do {
-
-				toReturn.add(result.getString("warpInfo"));
-
-			} while (result.next());
-		} catch (SQLException e) {
-			e.printStackTrace();
-		}
-
 		return toReturn;
 	}
 
 	@Override
-	public List<String> getClaimedChests() {
+	public synchronized List<String> getBanList() {
+		return new ArrayList<>(bans);
+	}
 
-		List<String> toReturn = new ArrayList<>();
+	@Override
+	public synchronized List<String> getAllyList() {
+		return new ArrayList<>(allies);
+	}
 
-		try (PreparedStatement ps = storageManager.getDatabase().selectWhere("*", TableName.CHESTCLAIMS, getCondition())) {
+	@Override
+	public synchronized List<String> getAllyRequestList() {
+		return new ArrayList<>(allyRequests);
+	}
 
-			ResultSet result = ps.executeQuery();
-			if (!result.next()) {
-				return toReturn;
-			}
-			do {
-				toReturn.add(result.getString("chestLoc"));
-
-			} while (result.next());
-		} catch (SQLException e) {
-			e.printStackTrace();
+	@Override
+	public synchronized void getEchestContents(Inventory inventory) {
+		if (echest == null || echest.length == 0) {
+			return;
 		}
 
-		return toReturn;
+		try {
+			Utils.deserializeItemsIntoInventory(inventory, echest);
+		} catch (RuntimeException e) {
+			Utils.deserializeIntoInventory(inventory, new String(echest, StandardCharsets.UTF_8));
+		}
 	}
 
 	@Override
-	public void addBan(UUID component) {
-		invalidateCache();
-		storageManager.getDatabase().insertRecord(TableName.BANS, "playerUUID, teamID",
-				"'" + component + "', '" + team.getID() + "'");
+	public synchronized void setEchestContents(Inventory inventory) {
+		echest = Utils.serializeInventoryAsBytes(inventory);
+		markDirty();
 	}
 
 	@Override
-	public void removeBan(UUID component) {
-		invalidateCache();
-		storageManager.getDatabase().deleteRecord(TableName.BANS, "playerUUID LIKE '" + component.toString() + "'");
+	public synchronized List<String> getWarps() {
+		return new ArrayList<>(warps);
 	}
 
 	@Override
-	public void addAlly(UUID ally) {
-		invalidateCache();
-		storageManager.getDatabase().insertRecord(TableName.ALLIES, "team1ID, team2ID",
-				"'" + team.getID() + "', '" + ally + "'");
+	public synchronized List<String> getClaimedChests() {
+		return new ArrayList<>(claimedChests);
 	}
 
 	@Override
-	public void removeAlly(UUID ally) {
-		invalidateCache();
-		storageManager.getDatabase().deleteRecord(TableName.ALLIES,
-				"(team1ID LIKE '" + team.getID() + "' AND team2ID LIKE '" + ally + "') OR (team1ID LIKE '" + ally
-						+ "' AND team2ID LIKE '" + team.getID() + "')");
+	public synchronized void addBan(UUID component) {
+		bans.add(component.toString());
+		markDirty();
 	}
 
 	@Override
-	public void addAllyRequest(UUID requesting) {
-		invalidateCache();
-		storageManager.getDatabase().insertRecord(TableName.ALLYREQUESTS, "receivingTeamID, requestingTeamID",
-				"'" + team.getID() + "', '" + requesting + "'");
+	public synchronized void removeBan(UUID component) {
+		bans.remove(component.toString());
+		markDirty();
 	}
 
 	@Override
-	public void removeAllyRequest(UUID requesting) {
-		invalidateCache();
-		storageManager.getDatabase().deleteRecord(TableName.ALLYREQUESTS,
-				"receivingTeamID LIKE '" + team.getID() + "' AND requestingTeamID LIKE '" + requesting + "'");
+	public synchronized void addAlly(UUID ally) {
+		allies.add(ally.toString());
+		markDirty();
 	}
 
 	@Override
-	public void addWarp(Warp component) {
-		invalidateCache();
-		storageManager.getDatabase().insertRecord(TableName.WARPS, "teamID, warpInfo",
-				"'" + team.getID() + "', '" + component.toString() + "'");
+	public synchronized void removeAlly(UUID ally) {
+		allies.remove(ally.toString());
+		markDirty();
 	}
 
 	@Override
-	public void removeWarp(Warp component) {
-		invalidateCache();
-		storageManager.getDatabase().deleteRecord(TableName.WARPS,
-				getCondition() + " AND warpInfo LIKE '" + component.toString() + "'");
+	public synchronized void addAllyRequest(UUID requesting) {
+		allyRequests.add(requesting.toString());
+		markDirty();
+	}
+
+	@Override
+	public synchronized void removeAllyRequest(UUID requesting) {
+		allyRequests.remove(requesting.toString());
+		markDirty();
+	}
+
+	@Override
+	public synchronized void addWarp(Warp component) {
+		warps.add(component.toString());
+		markDirty();
+	}
+
+	@Override
+	public synchronized void removeWarp(Warp component) {
+		warps.remove(component.toString());
+		markDirty();
 	}
 
 	@Override
 	public void promotePlayer(TeamPlayer promotePlayer) {
-		changeRank(promotePlayer);
+		updatePlayer(promotePlayer);
 	}
 
 	@Override
 	public void demotePlayer(TeamPlayer demotePlayer) {
-		changeRank(demotePlayer);
-	}
-
-	private void changeRank(TeamPlayer player) {
-		invalidateCache();
-		storageManager.getDatabase().updateRecordWhere(TableName.PLAYERS, "playerRank", player.getRank().value,
-				"playerUUID = '" + player.getPlayer().getUniqueId() + "'");
-
+		updatePlayer(demotePlayer);
 	}
 
 	@Override
-	public void setTitle(TeamPlayer player) {
-		invalidateCache();
-		storageManager.getDatabase().updateRecordWhere(TableName.PLAYERS, "title", player.getTitle(),
-				"playerUUID = '" + player.getPlayer().getUniqueId() + "'");
+	public synchronized void setTitle(TeamPlayer player) {
+		updatePlayer(player);
 	}
 
 	@Override
-	public void setAnchor(TeamPlayer player, boolean anchor) {
-		invalidateCache();
-		storageManager.getDatabase().updateRecordWhere(TableName.PLAYERS, "anchor", anchor,
-				"playerUUID = '" + player.getPlayer().getUniqueId() + "'");
+	public synchronized void setAnchor(TeamPlayer player, boolean anchor) {
+		StoredPlayer existing = players.get(player.getPlayerUUID());
+		String title = existing == null ? player.getTitle() : existing.title();
+		int rank = existing == null ? player.getRank().value : existing.rank();
+		players.put(player.getPlayerUUID(), new StoredPlayer(player.getPlayerUUID(), rank, title, anchor));
+		markDirty();
+	}
+
+	public synchronized void updatePlayer(TeamPlayer player) {
+		players.put(player.getPlayerUUID(), StoredPlayer.fromTeamPlayer(player));
+		markDirty();
+	}
+
+	public synchronized void removePlayer(TeamPlayer player) {
+		players.remove(player.getPlayerUUID());
+		markDirty();
+	}
+
+	public synchronized void addClaim(String location) {
+		claimedChests.add(location);
+		markDirty();
+	}
+
+	public synchronized void removeClaim(String location) {
+		claimedChests.remove(location);
+		markDirty();
 	}
 
 	@Override
-	public void setPlayerList(List<String> players) {
-		// not needed
+	public synchronized void setPlayerList(List<String> players) {
+		this.players.clear();
+		for (String player : players) {
+			StoredPlayer storedPlayer = StoredPlayer.fromString(player);
+			this.players.put(storedPlayer.uuid(), storedPlayer);
+		}
+		markDirty();
 	}
 
 	@Override
-	public void setAnchoredPlayerList(List<String> players) {
-		// not needed
+	public synchronized void setAnchoredPlayerList(List<String> players) {
+		Set<UUID> anchoredPlayers = new HashSet<>();
+		for (String player : players) {
+			anchoredPlayers.add(UUID.fromString(player));
+		}
+		this.players.replaceAll((uuid, storedPlayer) -> storedPlayer.withAnchor(anchoredPlayers.contains(uuid)));
+		markDirty();
 	}
 
 	@Override
-	public void setBanList(List<String> players) {
-		// not needed
+	public synchronized void setBanList(List<String> players) {
+		bans.clear();
+		bans.addAll(players);
+		markDirty();
 	}
 
 	@Override
-	public void setAllyList(List<String> players) {
-		// not needed
+	public synchronized void setAllyList(List<String> players) {
+		allies.clear();
+		allies.addAll(players);
+		markDirty();
 	}
 
 	@Override
-	public void setAllyRequestList(List<String> players) {
-		// not needed
+	public synchronized void setAllyRequestList(List<String> players) {
+		allyRequests.clear();
+		allyRequests.addAll(players);
+		markDirty();
 	}
 
 	@Override
-	public void setWarps(List<String> warps) {
-		// not needed
+	public synchronized void setWarps(List<String> warps) {
+		this.warps.clear();
+		this.warps.addAll(warps);
+		markDirty();
 	}
 
 	@Override
-	public void setClaimedChests(List<String> chests) {
-		// not needed
+	public synchronized void setClaimedChests(List<String> chests) {
+		claimedChests.clear();
+		claimedChests.addAll(chests);
+		markDirty();
 	}
 
 	@Override
-	public Map<String, String> getRawMeta() {
-		Map<String, String> rawMeta = new HashMap<>();
-		String condition = "teamID = '" + team.getID().toString() + "'";
-		try (PreparedStatement ps = storageManager.getDatabase().selectWhere("*", TableName.TEAM_META, condition)) {
-			ResultSet rs = ps.executeQuery();
-			while (rs.next()) {
-				rawMeta.put(rs.getString("metaKey"), rs.getString("metaValue"));
+	public synchronized Map<String, String> getRawMeta() {
+		return new HashMap<>(meta);
+	}
+
+	@Override
+	public synchronized void saveMeta(TeamMeta meta) {
+		this.meta.clear();
+		this.meta.putAll(meta.getSerialized());
+		markDirty();
+	}
+
+	public synchronized TeamSnapshot snapshot(boolean force) {
+		if (!force && !dirty) {
+			return null;
+		}
+
+		dirty = false;
+		return new TeamSnapshot(
+				team.getID().toString(),
+				stringValue(StoredTeamValue.NAME),
+				stringValue(StoredTeamValue.DESCRIPTION),
+				booleanValue(StoredTeamValue.OPEN),
+				intValue(StoredTeamValue.SCORE),
+				doubleValue(StoredTeamValue.MONEY),
+				stringValue(StoredTeamValue.HOME),
+				stringValue(StoredTeamValue.COLOR),
+				echest == null ? null : echest.clone(),
+				intValue(StoredTeamValue.LEVEL),
+				stringValue(StoredTeamValue.TAG),
+				booleanValue(StoredTeamValue.PVP),
+				booleanValue(StoredTeamValue.ANCHOR),
+				new ArrayList<>(players.values()),
+				new ArrayList<>(bans),
+				new ArrayList<>(allies),
+				new ArrayList<>(allyRequests),
+				new ArrayList<>(warps),
+				new ArrayList<>(claimedChests),
+				new HashMap<>(meta));
+	}
+
+	public synchronized void restoreDirty() {
+		dirty = true;
+	}
+
+	private String stringValue(StoredTeamValue storedValue) {
+		return getString(storedValue.getReference());
+	}
+
+	private boolean booleanValue(StoredTeamValue storedValue) {
+		return getBoolean(storedValue.getReference());
+	}
+
+	private int intValue(StoredTeamValue storedValue) {
+		return getInt(storedValue.getReference());
+	}
+
+	private double doubleValue(StoredTeamValue storedValue) {
+		return getDouble(storedValue.getReference());
+	}
+
+	public record TeamSnapshot(String teamId, String name, String description, boolean open, int score, double money,
+	                           String home, String color, byte[] echest, int level, String tag, boolean pvp,
+	                           boolean anchor, List<StoredPlayer> players, List<String> bans, List<String> allies,
+	                           List<String> allyRequests, List<String> warps, List<String> claimedChests,
+	                           Map<String, String> meta) {
+	}
+
+	public record StoredPlayer(UUID uuid, int rank, String title, boolean anchor) {
+		static StoredPlayer fromTeamPlayer(TeamPlayer player) {
+			return new StoredPlayer(player.getPlayerUUID(), player.getRank().value, player.getTitle(), player.isAnchored());
+		}
+
+		static StoredPlayer fromString(String player) {
+			String[] split = player.split(",", 3);
+			UUID uuid = UUID.fromString(split[0]);
+			PlayerRank rank = split.length > 1 ? PlayerRank.getRank(split[1]) : PlayerRank.DEFAULT;
+			if (rank == null) {
+				try {
+					rank = PlayerRank.getRank(Integer.parseInt(split[1]));
+				} catch (NumberFormatException e) {
+					rank = PlayerRank.DEFAULT;
+				}
 			}
-		} catch (SQLException e) {
-			e.printStackTrace();
-		}
-		return rawMeta;
-	}
-
-	@Override
-	public void saveMeta(TeamMeta meta) {
-		String teamId = team.getID().toString();
-
-		storageManager.getDatabase().deleteRecord(TableName.TEAM_META, "teamID = '" + teamId + "'");
-		Map<String, String> serializedMeta = meta.getSerialized();
-		if (serializedMeta.isEmpty()) {
-			return;
+			String title = split.length > 2 ? split[2] : "";
+			return new StoredPlayer(uuid, rank.value, title, false);
 		}
 
-		for (Map.Entry<String, String> entry : serializedMeta.entrySet()) {
-			String columns = "teamID, metaKey, metaValue";
-			String values = "'" + teamId + "', '" + entry.getKey() + "', '" + entry.getValue().replace("'", "''") + "'";
-			storageManager.getDatabase().insertRecord(TableName.TEAM_META, columns, values);
+		TeamPlayer toTeamPlayer() {
+			return new TeamPlayer(Bukkit.getOfflinePlayer(uuid), PlayerRank.getRank(rank), title, anchor);
+		}
+
+		StoredPlayer withAnchor(boolean anchor) {
+			return new StoredPlayer(uuid, rank, title, anchor);
 		}
 	}
 }

@@ -13,7 +13,7 @@ public class OnlineListPlaceholderProvider implements IndividualTeamPlaceholderP
 
 	@Override
 	public String getPlaceholderForTeam(Team team) {
-		return team.getMembers().getOnlinePlayersString();
+		return team.getData().getOnlinePlayersString();
 	}
 
 }

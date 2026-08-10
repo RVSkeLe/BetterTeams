@@ -15,7 +15,7 @@ public class MetaGetTeama extends TeamSelectSubCommand {
 	@Override
 	public CommandResponse onCommand(CommandSender sender, String label, String[] args, Team team) {
 		if (args.length == 1) {
-			Map<String, String> allMetaData = team.getMeta().get().getAll();
+			Map<String, String> allMetaData = team.getMeta().getAll();
 
 			if (allMetaData.isEmpty()) { return new CommandResponse(false, "admin.meta.get.noMetaData"); }
 
@@ -27,7 +27,7 @@ public class MetaGetTeama extends TeamSelectSubCommand {
 
 		} else if (args.length == 2) {
 			String key = args[1];
-			Optional<String> value = team.getMeta().get().get(key);
+			Optional<String> value = team.getMeta().get(key);
 
 			if (value.isPresent()) {
 				return new CommandResponse(true, new ReferencedFormatMessage("admin.meta.get.specificMetaData", key, value.get()));

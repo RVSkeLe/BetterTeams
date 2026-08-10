@@ -6,6 +6,6 @@ import com.booksaw.betterTeams.integrations.placeholder.IndividualTeamPlaceholde
 public class MoneyShortPlaceholderProvider implements IndividualTeamPlaceholderProvider {
 	@Override
 	public String getPlaceholderForTeam(Team team) {
-		return team.getMoneyComponent().getMoneyShortFormatted();
+		return team.getMoneyShortFormatted();
 	}
 }

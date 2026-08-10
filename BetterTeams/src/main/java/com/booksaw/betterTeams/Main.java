@@ -33,6 +33,7 @@ import com.booksaw.betterTeams.integrations.hologram.HDHologramManager;
 import com.booksaw.betterTeams.integrations.hologram.HologramManager;
 import com.booksaw.betterTeams.integrations.placeholder.TeamPlaceholders;
 import com.booksaw.betterTeams.message.MessageManager;
+import com.booksaw.betterTeams.player.PlayerIdentityCache;
 import com.booksaw.betterTeams.score.ScoreManagement;
 import com.booksaw.betterTeams.team.level.LevelManager;
 import com.booksaw.betterTeams.team.storage.storageManager.SQLiteStorageManager;
@@ -154,6 +155,7 @@ public class Main extends JavaPlugin {
 		LevelManager.reload();
 
 		setupStorage();
+		PlayerIdentityCache.seedOnlinePlayers();
 
 		ChatManagement.enable();
 
@@ -446,6 +448,7 @@ public class Main extends JavaPlugin {
 		getServer().getPluginManager().registerEvents(new ScoreManagement(), this);
 		getServer().getPluginManager().registerEvents(new AllyManagement(), this);
 		getServer().getPluginManager().registerEvents(new MessagesManagement(), this);
+		getServer().getPluginManager().registerEvents(new PlayerIdentityCache(), this);
 
 		if (getConfig().getBoolean("checkUpdates")) {
 			getServer().getPluginManager().registerEvents(new UpdateChecker(this), this);

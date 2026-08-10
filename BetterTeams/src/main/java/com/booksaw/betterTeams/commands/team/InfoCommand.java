@@ -5,7 +5,6 @@ import com.booksaw.betterTeams.commands.ParentCommand;
 import com.booksaw.betterTeams.commands.SubCommand;
 import com.booksaw.betterTeams.message.HelpMessage;
 import com.booksaw.betterTeams.message.MessageManager;
-import com.booksaw.betterTeams.team.SetTeamComponent;
 import org.bukkit.ChatColor;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.command.CommandSender;
@@ -14,6 +13,7 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -64,9 +64,9 @@ public class InfoCommand extends SubCommand {
 		return infoMessages;
 	}
 
-	private static String getSetComponentMessage(SetTeamComponent<UUID> teams, final String referenceMessage) {
+	private static String getTeamSetMessage(Set<UUID> teams, final String referenceMessage) {
 		StringBuilder tmp = new StringBuilder();
-		for (UUID uuid : teams.get()) {
+		for (UUID uuid : teams) {
 			Team ally = Team.getTeam(uuid);
 
 			if (ally == null) {
@@ -85,7 +85,7 @@ public class InfoCommand extends SubCommand {
 	}
 
 	private static String getAlliesMessage(Team team) {
-		return getSetComponentMessage(team.getAllies(), "info.ally");
+		return getTeamSetMessage(team.getAllies(), "info.ally");
 	}
 
 	private static String getPlayerList(Team team, PlayerRank rank) {

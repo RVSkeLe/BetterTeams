@@ -177,6 +177,16 @@ public class Database {
 	 */
 	public void executeStatement(String statement, Object... placeholders) {
 		try {
+			executeStatementOrThrow(statement, placeholders);
+		} catch (SQLException e) {
+			Main.plugin.getLogger().severe("Something went wrong while executing SQL");
+			Main.plugin.getLogger().severe("SQL: " + statement);
+			e.printStackTrace();
+		}
+	}
+
+	public void executeStatementOrThrow(String statement, Object... placeholders) throws SQLException {
+		try {
 			if (!connection.isValid(2)) {
 				resetConnection();
 			}
@@ -194,10 +204,6 @@ public class Database {
 			}
 			Main.plugin.getLogger().fine("EXECUTING " + ps);
 			ps.executeUpdate();
-		} catch (SQLException e) {
-			Main.plugin.getLogger().severe("Something went wrong while executing SQL");
-			Main.plugin.getLogger().severe("SQL: " + statement);
-			e.printStackTrace();
 		}
 	}
 

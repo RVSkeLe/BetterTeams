@@ -1,7 +1,7 @@
 package com.booksaw.betterTeams;
 
+import com.booksaw.betterTeams.player.PlayerIdentityCache;
 import net.kyori.adventure.text.Component;
-import org.bukkit.Bukkit;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.InvalidConfigurationException;
@@ -30,23 +30,7 @@ public class Utils {
 	 * @return The offlinePlayer object
 	 */
 	public static @Nullable OfflinePlayer getOfflinePlayer(String name) {
-		@SuppressWarnings("deprecation")
-		OfflinePlayer player = Bukkit.getOfflinePlayer(name);
-
-		if (!player.hasPlayedBefore()) {
-			for (Team team : Team.getTeamManager().getLoadedTeamListClone().values()) {
-				for (OfflinePlayer offlinePlayer : team.getMembers().getOfflinePlayers()) {
-					String offlinePlayerName = offlinePlayer.getName();
-					if (offlinePlayerName != null && offlinePlayerName.equalsIgnoreCase(name)) {
-						return offlinePlayer;
-					}
-				}
-			}
-
-			return null;
-		}
-
-		return player;
+		return PlayerIdentityCache.getOfflinePlayer(name);
 	}
 
 	/**

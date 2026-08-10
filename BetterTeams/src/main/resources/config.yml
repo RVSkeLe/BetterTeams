@@ -37,6 +37,8 @@ language: en
 database:
   # File name relative to the BetterTeams plugin folder
   file: storage.db
+  # How often cached team data is saved back to SQLite, in seconds
+  saveIntervalSeconds: 300
 
 # This is the value to determine if the chat prefix is enabled
 # - If this is enabled (true / name) a prefix [TeamName] will be displayed at the begining of chat messages.

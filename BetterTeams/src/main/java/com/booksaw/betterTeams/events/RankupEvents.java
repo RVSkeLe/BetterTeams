@@ -53,7 +53,7 @@ public class RankupEvents implements Listener {
 				str = str.replace("%level%", level.toString());
 				if (str.contains("%player%")) {
 
-					for (TeamPlayer p : team.getMembers().getClone()) {
+					for (TeamPlayer p : team.getMembersClone()) {
 						String newStr = str.replace("%player%", Objects.requireNonNull(p.getPlayer().getName()));
 						if (Main.placeholderAPI) {
 							newStr = PlaceholderAPI.setPlaceholders(p.getPlayer(), newStr);

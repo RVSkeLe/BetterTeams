@@ -13,7 +13,7 @@ public class MetaRemoveTeama extends TeamSelectSubCommand {
 	public CommandResponse onCommand(CommandSender sender, String label, String[] args, Team team) {
 		String key = args[1];
 
-		if (!team.getMeta().get().has(key)) {
+		if (!team.getMeta().has(key)) {
 			return new CommandResponse(false, "admin.meta.get.noexist");
 		}
 

@@ -2,7 +2,7 @@ package com.booksaw.betterTeams.events;
 
 import com.booksaw.betterTeams.Team;
 import com.booksaw.betterTeams.message.MessageManager;
-import com.booksaw.betterTeams.team.EChestComponent;
+import com.booksaw.betterTeams.team.TeamData;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
@@ -25,7 +25,7 @@ public class InventoryManagement implements Listener {
 	@EventHandler
 	public void onClose(InventoryCloseEvent e) {
 
-		if (e.getView().getType() != InventoryType.CHEST || !e.getView().getTitle().equals(inventoryName) || (!(e.getInventory().getHolder() instanceof EChestComponent.EchestInventoryHolder))) {
+		if (e.getView().getType() != InventoryType.CHEST || !e.getView().getTitle().equals(inventoryName) || (!(e.getInventory().getHolder() instanceof TeamData.EchestInventoryHolder))) {
 			e.getInventory().getHolder();
 			return;
 		}

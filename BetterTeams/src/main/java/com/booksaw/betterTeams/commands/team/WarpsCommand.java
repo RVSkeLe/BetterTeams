@@ -13,7 +13,7 @@ public class WarpsCommand extends TeamSubCommand {
 	public CommandResponse onCommand(TeamPlayer player, String label, String[] args, Team team) {
 
 		StringBuilder replace = new StringBuilder();
-		for (Warp warp : team.getWarps().get()) {
+		for (Warp warp : team.getWarps()) {
 			replace.append(warp.getName()).append(", ");
 		}
 

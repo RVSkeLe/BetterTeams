@@ -43,7 +43,7 @@ public class ChatMessage extends StaticComponentHolderMessage {
 	}
 
 	public static ChatMessage teamChat(@NotNull Team team, @NotNull TeamPlayer teamPlayer, @Nullable String prefix, @NotNull String message, @NotNull String syntax, TeamMessageController.TeamMessageType messageType) {
-		if (!requireNonNull(team, "The provided team cannot be null.").getMembers().getClone().contains(requireNonNull(teamPlayer, "The provided team player cannot be null."))) {
+		if (!requireNonNull(team, "The provided team cannot be null.").getMembersClone().contains(requireNonNull(teamPlayer, "The provided team player cannot be null."))) {
 			throw new IllegalArgumentException("The provided team player must be a member of the provided team.");
 		}
 		Player player = teamPlayer.getPlayer().getPlayer();

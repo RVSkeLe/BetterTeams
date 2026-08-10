@@ -111,7 +111,7 @@ public class ApolloManager implements Listener {
 	}
 
 	private void refreshTeam(Team team) {
-		Set<TeamPlayer> members = team.getMembers().getClone();
+		Set<TeamPlayer> members = team.getMembersClone();
 
 		JsonArray teammates = new JsonArray();
 		for (TeamPlayer tp : members) {

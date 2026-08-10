@@ -1,6 +1,6 @@
 package com.booksaw.betterTeams;
 
-import com.booksaw.betterTeams.team.LocationSetComponent;
+import com.booksaw.betterTeams.team.TeamData;
 import lombok.Getter;
 import org.bukkit.Location;
 import org.bukkit.entity.Player;
@@ -19,7 +19,7 @@ public class Warp {
 
 	public Warp(String[] args) {
 		name = args[0];
-		location = LocationSetComponent.getLocation(args[1]);
+		location = TeamData.locationFromString(args[1]);
 
 		if (args.length == 3) {
 			encrypPassword = hashString(args[2]);
@@ -63,7 +63,7 @@ public class Warp {
 
 	@Override
 	public String toString() {
-		String warpString = LocationSetComponent.getString(location);
+		String warpString = TeamData.locationToString(location);
 		if (warpString == null) {
 			return null;
 		}

@@ -67,7 +67,7 @@ public class DelwarpCommand extends TeamSubCommand {
 					return;
 				}
 
-				for (Warp temp : team.getWarps().get()) {
+				for (Warp temp : team.getWarps()) {
 					if (temp.getName().startsWith(args[0])) {
 						options.add(temp.getName());
 					}

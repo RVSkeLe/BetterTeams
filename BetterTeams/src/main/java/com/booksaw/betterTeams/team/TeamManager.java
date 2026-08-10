@@ -8,6 +8,7 @@ import com.booksaw.betterTeams.customEvents.PurgeEvent;
 import com.booksaw.betterTeams.customEvents.post.PostCreateTeamEvent;
 import com.booksaw.betterTeams.customEvents.post.PostPurgeEvent;
 import com.booksaw.betterTeams.events.ChestManagement;
+import com.booksaw.betterTeams.player.PlayerIdentityCache;
 import com.booksaw.betterTeams.team.storage.team.TeamStorage;
 import lombok.Getter;
 import org.bukkit.Bukkit;
@@ -21,12 +22,18 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 public abstract class TeamManager {
 	/**
 	 * A list of all teams
 	 */
-	protected final HashMap<UUID, Team> loadedTeams;
+	protected final Map<UUID, Team> loadedTeams;
+
+	/**
+	 * Reverse lookup from player UUID to team UUID.
+	 */
+	protected final Map<UUID, UUID> playerTeamIndex;
 
 	/**
 	 * If chat is being logged to the console
@@ -40,7 +47,8 @@ public abstract class TeamManager {
 	protected TeamManager() {
 		logChat = Main.plugin.getConfig().getBoolean("logTeamChat");
 
-		loadedTeams = new HashMap<>();
+		loadedTeams = new ConcurrentHashMap<>();
+		playerTeamIndex = new ConcurrentHashMap<>();
 
 	}
 
@@ -52,7 +60,7 @@ public abstract class TeamManager {
 	 */
 	@SuppressWarnings("unchecked")
 	public Map<UUID, Team> getLoadedTeamListClone() {
-		return (HashMap<UUID, Team>) loadedTeams.clone();
+		return new HashMap<>(loadedTeams);
 	}
 
 	/**
@@ -79,6 +87,7 @@ public abstract class TeamManager {
 		try {
 			Team team = new Team(uuid);
 			loadedTeams.put(uuid, team);
+			indexTeamPlayers(team);
 			return team;
 		} catch (IllegalArgumentException e) {
 			return null;
@@ -112,9 +121,7 @@ public abstract class TeamManager {
 	}
 
 	/**
-	 * Used to find the team that a specified player is in, this is the highest time
-	 * complexity search to find a team (O(n^2)) so only use when the other provided
-	 * methods are not possible
+	 * Used to find the team that a specified player is in.
 	 *
 	 * @param player the player which is in a team
 	 * @return the team they are in [null - they are not in a team]
@@ -123,16 +130,6 @@ public abstract class TeamManager {
 	@Contract(pure = true, value = "null -> null")
 	public Team getTeam(@Nullable OfflinePlayer player) {
 		if (player == null) {
-			return null;
-		}
-
-		// checking if the player is in a loaded team (save hitting secondary storage every time)
-		Optional<Team> possibleTeam = loadedTeams.values().stream().filter(team -> team.getMembers().contains(player)).findFirst();
-		if (possibleTeam.isPresent()) {
-			return possibleTeam.get();
-		}
-
-		if (!isInTeam(player)) {
 			return null;
 		}
 
@@ -346,7 +343,9 @@ public abstract class TeamManager {
 	 * @param player The player to check
 	 * @return If they are in a team
 	 */
-	public abstract boolean isInTeam(OfflinePlayer player);
+	public boolean isInTeam(OfflinePlayer player) {
+		return player != null && playerTeamIndex.containsKey(player.getUniqueId());
+	}
 
 	/**
 	 * Used to get the uuid of the team that the specified player is in
@@ -354,7 +353,26 @@ public abstract class TeamManager {
 	 * @param player the plyaer to check for
 	 * @return The team uuid
 	 */
-	public abstract UUID getTeamUUID(OfflinePlayer player);
+	public UUID getTeamUUID(OfflinePlayer player) {
+		return player == null ? null : playerTeamIndex.get(player.getUniqueId());
+	}
+
+	protected void indexPlayer(Team team, TeamPlayer player) {
+		playerTeamIndex.put(player.getPlayerUUID(), team.getID());
+		PlayerIdentityCache.cache(player.getPlayer());
+	}
+
+	protected void unindexPlayer(Team team, TeamPlayer player) {
+		playerTeamIndex.remove(player.getPlayerUUID(), team.getID());
+	}
+
+	protected void indexTeamPlayers(Team team) {
+		team.getMembersClone().forEach(player -> indexPlayer(team, player));
+	}
+
+	protected void unindexTeamPlayers(Team team) {
+		team.getMembersClone().forEach(player -> unindexPlayer(team, player));
+	}
 
 	/**
 	 * Used to get the team uuid from the team name
