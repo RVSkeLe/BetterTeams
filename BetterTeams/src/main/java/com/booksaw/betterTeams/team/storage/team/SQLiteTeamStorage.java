@@ -184,19 +184,34 @@ public class SQLiteTeamStorage extends TeamStorage {
 	@Override
 	public void getEchestContents(Inventory inventory) {
 
-		String result = storageManager.getDatabase().getResult("echest", TableName.TEAM, getCondition());
-		if (result == null || result.isEmpty()) {
-			return;
-		}
+		try (PreparedStatement ps = storageManager.getDatabase().selectWhere("echest", TableName.TEAM, getCondition())) {
+			ResultSet result = ps.executeQuery();
+			if (!result.next()) {
+				return;
+			}
 
-		Utils.deserializeIntoInventory(inventory, result);
+			byte[] data = result.getBytes("echest");
+			if (data == null || data.length == 0) {
+				return;
+			}
+
+			try {
+				Utils.deserializeItemsIntoInventory(inventory, data);
+			} catch (RuntimeException e) {
+				String legacyData = result.getString("echest");
+				if (legacyData == null || legacyData.isEmpty()) {
+					throw e;
+				}
+				Utils.deserializeIntoInventory(inventory, legacyData);
+			}
+		} catch (SQLException e) {
+			e.printStackTrace();
+		}
 	}
 
 	@Override
 	public void setEchestContents(Inventory inventory) {
-		String serial = Utils.serializeInventory(inventory);
-		serial = serial.replace("\\", "\\\\");
-		serial = serial.replace("\"", "\\\"");
+		byte[] serial = Utils.serializeInventoryAsBytes(inventory);
 		invalidateCache();
 		storageManager.getDatabase().executeStatement("UPDATE %s SET echest = ? WHERE %s".formatted(TableName.TEAM.toString(), getCondition()), serial);
 

@@ -141,6 +141,23 @@ public class Database {
 		return false;
 	}
 
+	public String getColumnType(TableName table, String column) {
+		String query = "PRAGMA table_info(" + table + ")";
+		try (PreparedStatement ps = connection.prepareStatement(query)) {
+			try (ResultSet rs = ps.executeQuery()) {
+				while (rs.next()) {
+					if (column.equalsIgnoreCase(rs.getString("name"))) {
+						return rs.getString("type");
+					}
+				}
+			}
+		} catch (SQLException e) {
+			Main.plugin.getLogger().severe("Error checking column type: " + table + "." + column);
+			e.printStackTrace();
+		}
+		return "";
+	}
+
 	protected void addColumn(TableName table, String newColumnName, String columnDefinition, String referenceColumn,
 	                         boolean after) {
 		String update = "ALTER TABLE " + table.toString() + " ADD " + newColumnName + " " + columnDefinition;
@@ -169,7 +186,11 @@ public class Database {
 
 		try (PreparedStatement ps = connection.prepareStatement(statement)) {
 			for (int i = 0; i < placeholders.length; i++) {
-				ps.setObject(i + 1, placeholders[i]);
+				if (placeholders[i] instanceof byte[] bytes) {
+					ps.setBytes(i + 1, bytes);
+				} else {
+					ps.setObject(i + 1, placeholders[i]);
+				}
 			}
 			Main.plugin.getLogger().fine("EXECUTING " + ps);
 			ps.executeUpdate();

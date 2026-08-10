@@ -3,6 +3,7 @@ package com.booksaw.betterTeams;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
 import org.bukkit.OfflinePlayer;
+import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.InvalidConfigurationException;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
@@ -71,6 +72,10 @@ public class Utils {
 		return json.saveToString();
 	}
 
+	public static byte @NotNull [] serializeInventoryAsBytes(@NotNull Inventory inventory) {
+		return ItemStack.serializeItemsAsBytes(inventory.getContents());
+	}
+
 	/**
 	 * Converts a single ItemStack into a YAML string representation.
 	 *
@@ -93,18 +98,60 @@ public class Utils {
 	 */
 	public static void deserializeIntoInventory(@NotNull Inventory inventory, @NotNull String jsons) {
 		try {
-			YamlConfiguration json = new YamlConfiguration();
-			json.loadFromString(jsons);
-
-			Map<String, Object> items = json.getConfigurationSection("items").getValues(false);
-			for (Map.Entry<String, Object> item : items.entrySet()) {
-				ItemStack itemstack = (ItemStack) item.getValue();
-				int idx = Integer.parseInt(item.getKey());
-				inventory.setItem(idx, itemstack);
+			ItemStack[] contents = deserializeLegacyInventoryContents(jsons, inventory.getSize());
+			for (int i = 0; i < contents.length; i++) {
+				inventory.setItem(i, contents[i]);
 			}
-		} catch (InvalidConfigurationException e) {
+		} catch (InvalidConfigurationException | RuntimeException e) {
 			e.printStackTrace();
 		}
+	}
+
+	public static void deserializeItemsIntoInventory(@NotNull Inventory inventory, byte @NotNull [] data) {
+		ItemStack[] contents = ItemStack.deserializeItemsFromBytes(data);
+		inventory.clear();
+		for (int i = 0; i < Math.min(contents.length, inventory.getSize()); i++) {
+			inventory.setItem(i, contents[i]);
+		}
+	}
+
+	public static byte @Nullable [] serializeLegacyInventoryAsBytes(@Nullable String serializedInventory, int inventorySize)
+			throws InvalidConfigurationException {
+		if (serializedInventory == null || serializedInventory.isEmpty()) {
+			return null;
+		}
+
+		ItemStack[] contents = deserializeLegacyInventoryContents(serializedInventory, inventorySize);
+		for (ItemStack item : contents) {
+			if (item != null) {
+				return ItemStack.serializeItemsAsBytes(contents);
+			}
+		}
+		return null;
+	}
+
+	public static @NotNull ItemStack[] deserializeLegacyInventoryContents(@NotNull String serializedInventory, int inventorySize)
+			throws InvalidConfigurationException {
+		YamlConfiguration json = new YamlConfiguration();
+		json.loadFromString(serializedInventory);
+
+		ItemStack[] contents = new ItemStack[inventorySize];
+		ConfigurationSection items = json.getConfigurationSection("items");
+		if (items == null) {
+			return contents;
+		}
+
+		for (Map.Entry<String, Object> item : items.getValues(false).entrySet()) {
+			if (!(item.getValue() instanceof ItemStack itemStack)) {
+				continue;
+			}
+
+			int idx = Integer.parseInt(item.getKey());
+			if (idx >= 0 && idx < inventorySize) {
+				contents[idx] = itemStack;
+			}
+		}
+		return contents;
 	}
 
 	/**

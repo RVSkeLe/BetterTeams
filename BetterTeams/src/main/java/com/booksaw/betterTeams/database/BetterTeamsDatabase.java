@@ -1,16 +1,26 @@
 package com.booksaw.betterTeams.database;
 
+import com.booksaw.betterTeams.Main;
+import com.booksaw.betterTeams.Utils;
 import com.booksaw.betterTeams.database.api.Database;
+import org.bukkit.configuration.InvalidConfigurationException;
 
+import java.nio.charset.StandardCharsets;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 public class BetterTeamsDatabase extends Database {
 
+	private static final String TEAM_TABLE_SCHEMA =
+			"teamID VARCHAR(50) NOT NULL PRIMARY KEY, name VARCHAR(50) NOT NULL, description VARCHAR(300), open BOOLEAN DEFAULT 0, score INT DEFAULT 0, money DOUBLE DEFAULT 0, home VARCHAR(200), color CHAR(1) DEFAULT '6', echest BLOB, level INT DEFAULT 1, tag VARCHAR(50), pvp BOOLEAN DEFAULT 0";
+	private static final String TEAM_TABLE_SCHEMA_WITH_ANCHOR =
+			TEAM_TABLE_SCHEMA + ", anchor BOOLEAN DEFAULT 0";
+
 	public void setupTables() {
-		createTableIfNotExists(TableName.TEAM,
-				"teamID VARCHAR(50) NOT NULL PRIMARY KEY, name VARCHAR(50) NOT NULL, description VARCHAR(300), open BOOLEAN DEFAULT 0, score INT DEFAULT 0, money DOUBLE DEFAULT 0, home VARCHAR(200), color CHAR(1) DEFAULT '6', echest TEXT(20000), level INT DEFAULT 1, tag VARCHAR(50), pvp BOOLEAN DEFAULT 0");
+		createTableIfNotExists(TableName.TEAM, TEAM_TABLE_SCHEMA);
 
 		createTableIfNotExists(TableName.PLAYERS,
 				"playerUUID VARCHAR(50) NOT NULL PRIMARY KEY, teamID VARCHAR(50) NOT NULL, playerRank INT NOT NULL, title VARCHAR(100), FOREIGN KEY (teamID) REFERENCES "
@@ -51,6 +61,53 @@ public class BetterTeamsDatabase extends Database {
 
 		if (!hasColumn(TableName.PLAYERS, "anchor")) {
 			addColumn(TableName.PLAYERS, "anchor", "BOOLEAN DEFAULT 0", "title", true);
+		}
+
+		migrateEchestColumnToBlobIfNeeded();
+	}
+
+	private void migrateEchestColumnToBlobIfNeeded() {
+		if ("BLOB".equalsIgnoreCase(getColumnType(TableName.TEAM, "echest"))) {
+			return;
+		}
+
+		Map<String, byte[]> migratedEchests = new LinkedHashMap<>();
+		try (PreparedStatement statement = selectWhere("teamID, echest", TableName.TEAM,
+				"echest IS NOT NULL AND echest != ''")) {
+			ResultSet resultSet = statement.executeQuery();
+			while (resultSet.next()) {
+				String legacyEchest = resultSet.getString("echest");
+				try {
+					byte[] serialized = Utils.serializeLegacyInventoryAsBytes(legacyEchest, 27);
+					if (serialized != null) {
+						migratedEchests.put(resultSet.getString("teamID"), serialized);
+					}
+				} catch (InvalidConfigurationException | RuntimeException e) {
+					Main.plugin.getLogger().warning("Could not migrate legacy enderchest contents for team "
+							+ resultSet.getString("teamID"));
+					if (legacyEchest != null) {
+						migratedEchests.put(resultSet.getString("teamID"), legacyEchest.getBytes(StandardCharsets.UTF_8));
+					}
+					e.printStackTrace();
+				}
+			}
+		} catch (SQLException e) {
+			Main.plugin.getLogger().warning("Could not read legacy enderchest contents before SQLite BLOB migration");
+			e.printStackTrace();
+		}
+
+		executeStatement("PRAGMA foreign_keys = OFF");
+		executeStatement("DROP TABLE IF EXISTS " + TableName.TEAM + "_new;");
+		executeStatement("CREATE TABLE IF NOT EXISTS " + TableName.TEAM + "_new(" + TEAM_TABLE_SCHEMA_WITH_ANCHOR + ");");
+		executeStatement("INSERT OR IGNORE INTO " + TableName.TEAM + "_new (teamID, name, description, open, score, money, home, color, level, tag, pvp, anchor) "
+				+ "SELECT teamID, name, description, open, score, money, home, color, level, tag, pvp, anchor FROM " + TableName.TEAM + ";");
+		executeStatement("DROP TABLE " + TableName.TEAM + ";");
+		executeStatement("ALTER TABLE " + TableName.TEAM + "_new RENAME TO " + TableName.TEAM + ";");
+		executeStatement("PRAGMA foreign_keys = ON");
+
+		for (Map.Entry<String, byte[]> entry : migratedEchests.entrySet()) {
+			executeStatement("UPDATE %s SET echest = ? WHERE teamID = ?".formatted(TableName.TEAM),
+					entry.getValue(), entry.getKey());
 		}
 	}
 

@@ -5,10 +5,9 @@ import com.booksaw.betterTeams.PlayerRank;
 import com.booksaw.betterTeams.Utils;
 import com.booksaw.betterTeams.database.BetterTeamsDatabase;
 import com.booksaw.betterTeams.database.TableName;
-import org.bukkit.Bukkit;
 import org.bukkit.configuration.ConfigurationSection;
+import org.bukkit.configuration.InvalidConfigurationException;
 import org.bukkit.configuration.file.YamlConfiguration;
-import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 
 import java.io.File;
@@ -234,7 +233,7 @@ public class LegacyStorageMigrator {
 						columns.getDouble(resultSet, "money", 0),
 						columns.getString(resultSet, "home", null),
 						columns.getString(resultSet, "color", "6"),
-						columns.getString(resultSet, "echest", null),
+						serializeLegacyMysqlEchest(teamId, columns.getString(resultSet, "echest", null)),
 						columns.getInt(resultSet, "level", 1),
 						columns.getString(resultSet, "tag", null),
 						columns.getBoolean(resultSet, "pvp", false),
@@ -292,7 +291,7 @@ public class LegacyStorageMigrator {
 
 	private void importTeam(UUID teamId, ConfigurationSection config, List<Relation> allies,
 	                        List<Relation> allyRequests) throws LegacyStorageMigrationException {
-		String echest = serializeLegacyEchest(config);
+		byte[] echest = serializeLegacyEchest(config);
 		insertTeam(teamId.toString(), config.getString("name", teamId.toString()),
 				config.getString("description", null),
 				config.getBoolean("open", false),
@@ -327,25 +326,35 @@ public class LegacyStorageMigrator {
 		importMeta(teamId, config.getConfigurationSection("meta"));
 	}
 
-	private String serializeLegacyEchest(ConfigurationSection config) {
+	private byte[] serializeLegacyMysqlEchest(String teamId, String legacyEchest) {
+		try {
+			return Utils.serializeLegacyInventoryAsBytes(legacyEchest, 27);
+		} catch (InvalidConfigurationException | RuntimeException e) {
+			logger.warning("Could not migrate legacy MySQL enderchest contents for team " + teamId);
+			e.printStackTrace();
+			return null;
+		}
+	}
+
+	private byte[] serializeLegacyEchest(ConfigurationSection config) {
 		if (!config.contains("echest")) {
 			return null;
 		}
 
-		Inventory inventory = Bukkit.createInventory(null, 27);
+		ItemStack[] contents = new ItemStack[27];
 		boolean hasItem = false;
 		for (int i = 0; i < 27; i++) {
 			ItemStack item = config.getItemStack("echest." + i);
 			if (item != null) {
-				inventory.setItem(i, item);
+				contents[i] = item;
 				hasItem = true;
 			}
 		}
-		return hasItem ? Utils.serializeInventory(inventory) : null;
+		return hasItem ? ItemStack.serializeItemsAsBytes(contents) : null;
 	}
 
 	private void insertTeam(String teamId, String name, String description, boolean open, int score, double money,
-	                        String home, String color, String echest, int level, String tag, boolean pvp,
+	                        String home, String color, byte[] echest, int level, String tag, boolean pvp,
 	                        boolean anchor) {
 		database.executeStatement("INSERT OR IGNORE INTO %s (teamID, name, description, open, score, money, home, color, echest, level, tag, pvp, anchor) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
 						.formatted(TableName.TEAM),
