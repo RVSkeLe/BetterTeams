@@ -87,7 +87,6 @@ public class Database {
 	private void setupSqliteConnection() throws SQLException {
 		try (Statement statement = connection.createStatement()) {
 			statement.execute("PRAGMA foreign_keys = ON");
-			statement.execute("PRAGMA journal_mode = WAL");
 		}
 	}
 
