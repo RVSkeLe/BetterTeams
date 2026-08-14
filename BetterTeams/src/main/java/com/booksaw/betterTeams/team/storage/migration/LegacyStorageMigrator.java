@@ -134,6 +134,7 @@ public class LegacyStorageMigrator {
 		File[] teamFiles = getYamlFiles(teamInfo);
 		List<Relation> allies = new ArrayList<>();
 		List<Relation> allyRequests = new ArrayList<>();
+		Set<String> importedTeamIds = new HashSet<>();
 		int importedTeams = 0;
 
 		for (File teamFile : teamFiles) {
@@ -143,6 +144,7 @@ public class LegacyStorageMigrator {
 				LegacyYaml teamConfig = loadLegacyYamlWithoutEchests(teamFile);
 				byte[] echest = serializeLegacyEchest(teamId.toString(), getMap(teamConfig.rawRoot(), "echest"));
 				importTeam(teamId, teamConfig.config(), echest, allies, allyRequests);
+				importedTeamIds.add(teamId.toString());
 				importedTeams++;
 			} catch (Throwable t) {
 				logger.severe("Failed migrating legacy YAML team " + teamId + ": " + t.getMessage());
@@ -150,7 +152,7 @@ public class LegacyStorageMigrator {
 			}
 		}
 
-		importRelations(allies, allyRequests);
+		importRelations(allies, allyRequests, importedTeamIds);
 		importTeamsFileData();
 		return importedTeams;
 	}
@@ -171,6 +173,7 @@ public class LegacyStorageMigrator {
 
 		List<Relation> allies = new ArrayList<>();
 		List<Relation> allyRequests = new ArrayList<>();
+		Set<String> importedTeamIds = new HashSet<>();
 		int importedTeams = 0;
 
 		for (String team : teams) {
@@ -182,10 +185,11 @@ public class LegacyStorageMigrator {
 			}
 			byte[] echest = serializeLegacyEchest(teamId.toString(), getMap(legacyTeams.rawRoot(), "team", team, "echest"));
 			importTeam(teamId, section, echest, allies, allyRequests);
+			importedTeamIds.add(teamId.toString());
 			importedTeams++;
 		}
 
-		importRelations(allies, allyRequests);
+		importRelations(allies, allyRequests, importedTeamIds);
 		importTeamsFileData(teamsConfig);
 		return importedTeams;
 	}
@@ -705,15 +709,35 @@ public class LegacyStorageMigrator {
 				.formatted(TableName.CHESTCLAIMS), teamId.toString(), location);
 	}
 
-	private void importRelations(List<Relation> allies, List<Relation> allyRequests) {
+	private void importRelations(List<Relation> allies, List<Relation> allyRequests, Set<String> importedTeamIds) {
+		int skippedAllies = 0;
 		for (Relation ally : deduplicate(allies)) {
+			if (!isImportedRelation(ally, importedTeamIds)) {
+				skippedAllies++;
+				continue;
+			}
 			database.executeStatement("INSERT OR IGNORE INTO %s (team1ID, team2ID) VALUES (?, ?)"
 					.formatted(TableName.ALLIES), ally.first(), ally.second());
 		}
+		int skippedAllyRequests = 0;
 		for (Relation allyRequest : deduplicate(allyRequests)) {
+			if (!isImportedRelation(allyRequest, importedTeamIds)) {
+				skippedAllyRequests++;
+				continue;
+			}
 			database.executeStatement("INSERT OR IGNORE INTO %s (receivingTeamID, requestingTeamID) VALUES (?, ?)"
 					.formatted(TableName.ALLYREQUESTS), allyRequest.first(), allyRequest.second());
 		}
+		if (skippedAllies > 0) {
+			logger.warning("Skipped " + skippedAllies + " legacy ally relation(s) pointing to teams that were not imported.");
+		}
+		if (skippedAllyRequests > 0) {
+			logger.warning("Skipped " + skippedAllyRequests + " legacy ally request(s) pointing to teams that were not imported.");
+		}
+	}
+
+	private boolean isImportedRelation(Relation relation, Set<String> importedTeamIds) {
+		return importedTeamIds.contains(relation.first()) && importedTeamIds.contains(relation.second());
 	}
 
 	private List<Relation> deduplicate(List<Relation> relations) {
