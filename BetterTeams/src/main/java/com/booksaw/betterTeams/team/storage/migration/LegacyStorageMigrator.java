@@ -2,15 +2,22 @@ package com.booksaw.betterTeams.team.storage.migration;
 
 import com.booksaw.betterTeams.Main;
 import com.booksaw.betterTeams.PlayerRank;
-import com.booksaw.betterTeams.Utils;
 import com.booksaw.betterTeams.database.BetterTeamsDatabase;
 import com.booksaw.betterTeams.database.TableName;
+import org.bukkit.Material;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.InvalidConfigurationException;
 import org.bukkit.configuration.file.YamlConfiguration;
+import org.bukkit.configuration.serialization.ConfigurationSerialization;
 import org.bukkit.inventory.ItemStack;
+import org.yaml.snakeyaml.LoaderOptions;
+import org.yaml.snakeyaml.Yaml;
+import org.yaml.snakeyaml.constructor.SafeConstructor;
 
 import java.io.File;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
@@ -21,10 +28,13 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 
 public class LegacyStorageMigrator {
@@ -33,10 +43,14 @@ public class LegacyStorageMigrator {
 	private static final String HOLOPATH = "holos";
 	private static final String TEAM_INFO_FOLDER = "teamInfo";
 	private static final String TEAMS_FILE = "teams.yml";
+	private static final int ECHEST_SIZE = 27;
+	private static final Object CONFIGURATION_SERIALIZATION_LOG_LOCK = new Object();
 
 	private final BetterTeamsDatabase database;
 	private final Logger logger;
 	private final File dataFolder;
+	private int downgradedLegacyEchestItems;
+	private int skippedLegacyEchestItems;
 
 	public LegacyStorageMigrator(BetterTeamsDatabase database) {
 		this.database = database;
@@ -67,6 +81,7 @@ public class LegacyStorageMigrator {
 			case NONE -> 0;
 		};
 
+		logLegacyEchestMigrationWarnings();
 		markMigrated(source, importedTeams);
 		logger.info("Legacy storage migration complete. Imported " + importedTeams + " teams into SQLite.");
 	}
@@ -85,9 +100,7 @@ public class LegacyStorageMigrator {
 
 	private LegacySource detectSource() {
 		File teamsFile = getTeamsFile();
-		YamlConfiguration teamsConfig = teamsFile.exists()
-				? YamlConfiguration.loadConfiguration(teamsFile)
-				: new YamlConfiguration();
+		YamlConfiguration teamsConfig = teamsFile.exists() ? loadYamlWithoutEchestsOrEmpty(teamsFile) : new YamlConfiguration();
 
 		String storageType = teamsConfig.getString("storageType", "");
 		if (storageType.isEmpty()) {
@@ -125,9 +138,16 @@ public class LegacyStorageMigrator {
 
 		for (File teamFile : teamFiles) {
 			UUID teamId = parseTeamId(teamFile.getName().replace(".yml", ""));
-			YamlConfiguration teamConfig = YamlConfiguration.loadConfiguration(teamFile);
-			importTeam(teamId, teamConfig, allies, allyRequests);
-			importedTeams++;
+
+			try {
+				LegacyYaml teamConfig = loadLegacyYamlWithoutEchests(teamFile);
+				byte[] echest = serializeLegacyEchest(teamId.toString(), getMap(teamConfig.rawRoot(), "echest"));
+				importTeam(teamId, teamConfig.config(), echest, allies, allyRequests);
+				importedTeams++;
+			} catch (Throwable t) {
+				logger.severe("Failed migrating legacy YAML team " + teamId + ": " + t.getMessage());
+//				t.printStackTrace();
+			}
 		}
 
 		importRelations(allies, allyRequests);
@@ -141,7 +161,8 @@ public class LegacyStorageMigrator {
 			throw new LegacyStorageMigrationException("Could not find legacy teams.yml for flatfile migration");
 		}
 
-		YamlConfiguration teamsConfig = YamlConfiguration.loadConfiguration(teamsFile);
+		LegacyYaml legacyTeams = loadLegacyYamlWithoutEchests(teamsFile);
+		YamlConfiguration teamsConfig = legacyTeams.config();
 		List<String> teams = teamsConfig.getStringList("teams");
 		ConfigurationSection teamSection = teamsConfig.getConfigurationSection("team");
 		if (teams.isEmpty() && teamSection != null) {
@@ -159,7 +180,8 @@ public class LegacyStorageMigrator {
 				logger.warning("Could not find flatfile data for team " + team + ", skipping");
 				continue;
 			}
-			importTeam(teamId, section, allies, allyRequests);
+			byte[] echest = serializeLegacyEchest(teamId.toString(), getMap(legacyTeams.rawRoot(), "team", team, "echest"));
+			importTeam(teamId, section, echest, allies, allyRequests);
 			importedTeams++;
 		}
 
@@ -289,9 +311,8 @@ public class LegacyStorageMigrator {
 		return "42S02".equals(e.getSQLState()) || e.getErrorCode() == 1146;
 	}
 
-	private void importTeam(UUID teamId, ConfigurationSection config, List<Relation> allies,
+	private void importTeam(UUID teamId, ConfigurationSection config, byte[] echest, List<Relation> allies,
 	                        List<Relation> allyRequests) throws LegacyStorageMigrationException {
-		byte[] echest = serializeLegacyEchest(config);
 		insertTeam(teamId.toString(), config.getString("name", teamId.toString()),
 				config.getString("description", null),
 				config.getBoolean("open", false),
@@ -328,29 +349,318 @@ public class LegacyStorageMigrator {
 
 	private byte[] serializeLegacyMysqlEchest(String teamId, String legacyEchest) {
 		try {
-			return Utils.serializeLegacyInventoryAsBytes(legacyEchest, 27);
-		} catch (InvalidConfigurationException | RuntimeException e) {
+			return serializeLegacyInventoryString(teamId, legacyEchest);
+		} catch (RuntimeException e) {
 			logger.warning("Could not migrate legacy MySQL enderchest contents for team " + teamId);
-			e.printStackTrace();
+//			e.printStackTrace();
 			return null;
 		}
 	}
 
-	private byte[] serializeLegacyEchest(ConfigurationSection config) {
-		if (!config.contains("echest")) {
+	private byte[] serializeLegacyInventoryString(String teamId, String legacyInventory) {
+		if (legacyInventory == null || legacyInventory.isEmpty()) {
 			return null;
 		}
 
-		ItemStack[] contents = new ItemStack[27];
+		Object rawYaml = new Yaml(new SafeConstructor(new LoaderOptions())).load(legacyInventory);
+		if (!(rawYaml instanceof Map<?, ?> rawRoot)) {
+			return null;
+		}
+		return serializeLegacyEchest(teamId, getMap(rawRoot, "items"));
+	}
+
+	private byte[] serializeLegacyEchest(String teamId, Map<?, ?> rawEchest) {
+		if (rawEchest == null || rawEchest.isEmpty()) {
+			return null;
+		}
+
+		ItemStack[] contents = new ItemStack[ECHEST_SIZE];
 		boolean hasItem = false;
-		for (int i = 0; i < 27; i++) {
-			ItemStack item = config.getItemStack("echest." + i);
+		for (int i = 0; i < ECHEST_SIZE; i++) {
+			ItemStack item = deserializeLegacyEchestItem(teamId, i, getMapValue(rawEchest, Integer.toString(i)));
 			if (item != null) {
 				contents[i] = item;
 				hasItem = true;
 			}
 		}
 		return hasItem ? ItemStack.serializeItemsAsBytes(contents) : null;
+	}
+
+	private ItemStack deserializeLegacyEchestItem(String teamId, int slot, Object rawItem) {
+		if (rawItem == null) {
+			return null;
+		}
+		if (rawItem instanceof ItemStack itemStack) {
+			return itemStack;
+		}
+		if (!(rawItem instanceof Map<?, ?> rawItemMap)) {
+			logger.warning("Could not migrate legacy enderchest slot " + slot + " for team " + teamId
+					+ ": expected item map but found " + rawItem.getClass().getSimpleName());
+			return null;
+		}
+
+		try {
+			Map<String, Object> normalized = normalizeLegacyItemMap(rawItemMap);
+			if (normalized.containsKey("meta")) {
+				ItemStack itemWithMeta = deserializeLegacyItemWithMeta(teamId, slot, normalized);
+				if (itemWithMeta != null) {
+					return itemWithMeta;
+				}
+				return downgradeLegacyEchestItem(rawItemMap);
+			}
+			return ItemStack.deserialize(normalized);
+		} catch (RuntimeException e) {
+			return downgradeLegacyEchestItem(rawItemMap);
+		}
+	}
+
+	private ItemStack deserializeLegacyItemWithMeta(String teamId, int slot, Map<String, Object> normalizedItem) {
+		if (hasUnsafeLegacyMeta(normalizedItem)) {
+			return null;
+		}
+
+		Logger configurationSerializationLogger = Logger.getLogger(ConfigurationSerialization.class.getName());
+		synchronized (CONFIGURATION_SERIALIZATION_LOG_LOCK) {
+			Level previousLevel = configurationSerializationLogger.getLevel();
+			try {
+				configurationSerializationLogger.setLevel(Level.OFF);
+
+				YamlConfiguration itemConfig = new YamlConfiguration();
+				itemConfig.set("item", normalizedItem);
+				itemConfig.loadFromString(itemConfig.saveToString());
+				return itemConfig.getItemStack("item");
+			} catch (Throwable t) {
+				logger.warning("Could not deserialize legacy enderchest ItemMeta for team " + teamId
+						+ " slot " + slot + " type " + normalizedItem.get("type")
+						+ ". Item will be downgraded. ItemMeta: " + normalizedItem.get("meta"));
+				return null;
+			} finally {
+				configurationSerializationLogger.setLevel(previousLevel);
+			}
+		}
+	}
+
+	private boolean hasUnsafeLegacyMeta(Map<String, Object> normalizedItem) {
+		Object meta = normalizedItem.get("meta");
+		return meta instanceof Map<?, ?> metaMap && hasAnyKey(metaMap,
+				"internal",
+				"blockMaterial",
+				"blockData",
+				"blockState",
+				"block-state");
+	}
+
+	private boolean hasAnyKey(Map<?, ?> map, String... keys) {
+		for (Map.Entry<?, ?> entry : map.entrySet()) {
+			String key = String.valueOf(entry.getKey());
+			for (String unsafeKey : keys) {
+				if (unsafeKey.equals(key)) {
+					return true;
+				}
+			}
+			Object value = entry.getValue();
+			if (value instanceof Map<?, ?> child && hasAnyKey(child, keys)) {
+				return true;
+			}
+			if (value instanceof List<?> list) {
+				for (Object child : list) {
+					if (child instanceof Map<?, ?> childMap && hasAnyKey(childMap, keys)) {
+						return true;
+					}
+				}
+			}
+		}
+		return false;
+	}
+
+	private ItemStack downgradeLegacyEchestItem(Map<?, ?> rawItemMap) {
+		ItemStack basicItem = deserializeBasicLegacyItem(rawItemMap);
+		if (basicItem != null) {
+			downgradedLegacyEchestItems++;
+			return basicItem;
+		}
+		skippedLegacyEchestItems++;
+		return ItemStack.of(Material.AIR);
+	}
+
+	private ItemStack deserializeBasicLegacyItem(Map<?, ?> rawItemMap) {
+		Object typeValue = getMapValue(rawItemMap, "type");
+		if (typeValue == null) {
+			return null;
+		}
+
+		Material material = Material.matchMaterial(String.valueOf(typeValue));
+		if (material == null) {
+			return null;
+		}
+
+		int amount = 1;
+		Object amountValue = getMapValue(rawItemMap, "amount");
+		if (amountValue instanceof Number number) {
+			amount = Math.max(1, Math.min(number.intValue(), material.getMaxStackSize()));
+		}
+
+		return new ItemStack(material, amount);
+	}
+
+	private void logLegacyEchestMigrationWarnings() {
+		if (downgradedLegacyEchestItems > 0) {
+			logger.warning("Legacy enderchest migration downgraded " + downgradedLegacyEchestItems
+					+ " item(s) to basic stacks because their old ItemMeta data is not compatible with this server version.");
+		}
+		if (skippedLegacyEchestItems > 0) {
+			logger.warning("Legacy enderchest migration skipped " + skippedLegacyEchestItems
+					+ " item(s) because their old ItemStack data is not compatible with this server version.");
+		}
+	}
+
+	private Map<String, Object> normalizeLegacyItemMap(Map<?, ?> rawMap) {
+		Map<String, Object> normalized = new LinkedHashMap<>();
+		for (Map.Entry<?, ?> entry : rawMap.entrySet()) {
+			String key = String.valueOf(entry.getKey());
+			Object value = normalizeLegacyItemValue(key, entry.getValue());
+			normalized.put(key, value);
+		}
+		return normalized;
+	}
+
+	private Object normalizeLegacyItemValue(String key, Object value) {
+//		if ("SpawnPotentials".equals(key) && !(value instanceof List<?>)) {
+//			return Collections.emptyList();
+//		}
+		if (value instanceof Map<?, ?> map) {
+			return normalizeLegacyItemMap(map);
+		}
+		if (value instanceof List<?> list) {
+			List<Object> normalized = new ArrayList<>(list.size());
+			for (Object item : list) {
+				normalized.add(normalizeLegacyItemValue("", item));
+			}
+			return normalized;
+		}
+		return value;
+	}
+
+	private LegacyYaml loadLegacyYamlWithoutEchests(File file) throws LegacyStorageMigrationException {
+		try {
+			String rawYaml = Files.readString(file.toPath(), StandardCharsets.UTF_8);
+			YamlConfiguration config = loadYamlWithoutEchests(rawYaml);
+			return new LegacyYaml(config, loadRawYamlMap(rawYaml, file));
+		} catch (IOException | InvalidConfigurationException e) {
+			throw new LegacyStorageMigrationException("Could not load legacy YAML file " + file.getName(), e);
+		}
+	}
+
+	private YamlConfiguration loadYamlWithoutEchestsOrEmpty(File file) {
+		try {
+			String rawYaml = Files.readString(file.toPath(), StandardCharsets.UTF_8);
+			return loadYamlWithoutEchests(rawYaml);
+		} catch (IOException | InvalidConfigurationException | RuntimeException e) {
+			logger.warning("Could not load legacy teams.yml while detecting storage type");
+//			e.printStackTrace();
+			return new YamlConfiguration();
+		}
+	}
+
+	private YamlConfiguration loadYamlWithoutEchests(String rawYaml) throws InvalidConfigurationException {
+		YamlConfiguration config = new YamlConfiguration();
+		config.loadFromString(stripYamlSectionsNamed(rawYaml, "echest"));
+		return config;
+	}
+
+	private Map<?, ?> loadRawYamlMap(String rawYaml, File file) {
+		try {
+			Object loaded = new Yaml(new SafeConstructor(new LoaderOptions())).load(rawYaml);
+			if (loaded instanceof Map<?, ?> map) {
+				return map;
+			}
+		} catch (RuntimeException e) {
+			logger.warning("Could not parse raw legacy YAML for enderchest migration in " + file.getName());
+//			e.printStackTrace();
+		}
+		return Collections.emptyMap();
+	}
+
+	private String stripYamlSectionsNamed(String rawYaml, String sectionName) {
+		StringBuilder stripped = new StringBuilder(rawYaml.length());
+		int skippedIndent = -1;
+
+		for (String line : rawYaml.split("\\R", -1)) {
+			String trimmed = line.trim();
+			int indent = indentation(line);
+			if (skippedIndent >= 0) {
+				if (!trimmed.isEmpty() && !trimmed.startsWith("#") && indent <= skippedIndent) {
+					skippedIndent = -1;
+				} else {
+					continue;
+				}
+			}
+
+			if (isYamlKeyNamed(line, sectionName)) {
+				skippedIndent = indent;
+				continue;
+			}
+
+			stripped.append(line).append('\n');
+		}
+		return stripped.toString();
+	}
+
+	private boolean isYamlKeyNamed(String line, String expectedKey) {
+		String trimmed = line.stripLeading();
+		if (trimmed.isEmpty() || trimmed.startsWith("#") || trimmed.startsWith("-")) {
+			return false;
+		}
+
+		int separator = trimmed.indexOf(':');
+		if (separator <= 0) {
+			return false;
+		}
+
+		String key = trimmed.substring(0, separator).trim();
+		if ((key.startsWith("'") && key.endsWith("'")) || (key.startsWith("\"") && key.endsWith("\""))) {
+			key = key.substring(1, key.length() - 1);
+		}
+		return expectedKey.equals(key);
+	}
+
+	private int indentation(String line) {
+		int spaces = 0;
+		while (spaces < line.length() && line.charAt(spaces) == ' ') {
+			spaces++;
+		}
+		return spaces;
+	}
+
+	private Map<?, ?> getMap(Map<?, ?> map, String... path) {
+		Object value = map;
+		for (String key : path) {
+			if (!(value instanceof Map<?, ?> currentMap)) {
+				return null;
+			}
+			value = getMapValue(currentMap, key);
+		}
+		return value instanceof Map<?, ?> result ? result : null;
+	}
+
+	private Object getMapValue(Map<?, ?> map, String key) {
+		if (map.containsKey(key)) {
+			return map.get(key);
+		}
+		try {
+			int numericKey = Integer.parseInt(key);
+			if (map.containsKey(numericKey)) {
+				return map.get(numericKey);
+			}
+		} catch (NumberFormatException ignored) {
+			// Keys like team UUIDs are expected to be non-numeric.
+		}
+		for (Map.Entry<?, ?> entry : map.entrySet()) {
+			if (key.equals(String.valueOf(entry.getKey()))) {
+				return entry.getValue();
+			}
+		}
+		return null;
 	}
 
 	private void insertTeam(String teamId, String name, String description, boolean open, int score, double money,
@@ -437,7 +747,7 @@ public class LegacyStorageMigrator {
 		if (!teamsFile.exists()) {
 			return;
 		}
-		importTeamsFileData(YamlConfiguration.loadConfiguration(teamsFile));
+		importTeamsFileData(loadLegacyYamlWithoutEchests(teamsFile).config());
 	}
 
 	private void importTeamsFileData(YamlConfiguration teamsConfig) throws LegacyStorageMigrationException {
@@ -500,6 +810,9 @@ public class LegacyStorageMigrator {
 	}
 
 	private record Relation(String first, String second) {
+	}
+
+	private record LegacyYaml(YamlConfiguration config, Map<?, ?> rawRoot) {
 	}
 
 	private static class ColumnLookup {
