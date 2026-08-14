@@ -39,7 +39,6 @@ import com.booksaw.betterTeams.team.level.LevelManager;
 import com.booksaw.betterTeams.team.storage.storageManager.SQLiteStorageManager;
 import com.tcoded.folialib.FoliaLib;
 import lombok.Getter;
-import net.kyori.adventure.platform.bukkit.BukkitAudiences;
 import net.milkbowl.vault.economy.Economy;
 import net.milkbowl.vault.permission.Permission;
 import org.bstats.bukkit.Metrics;
@@ -111,13 +110,6 @@ public class Main extends JavaPlugin {
 
 	private ConfigManager configManager;
 
-	@Getter
-	private BukkitAudiences adventure;
-
-	public boolean isAdventure() {
-		return adventure != null;
-	}
-
 	@Override
 	public void onLoad() {
 		plugin = this;
@@ -140,15 +132,6 @@ public class Main extends JavaPlugin {
 	public void onEnable() {
 		foliaLib = new FoliaLib(this);
 		setupMetrics();
-
-		if (adventure == null) try {
-			adventure = BukkitAudiences.create(this);
-		} catch (Exception e) {
-			getLogger().severe("Failed to create BukkitAudiences: " + e.getMessage());
-			adventure = null;
-		}
-
-		MessageManager.setupMessageSender(adventure);
 
 		loadCustomConfigs();
 
@@ -226,11 +209,6 @@ public class Main extends JavaPlugin {
 		chatManagement = null;
 
 		Team.disable();
-
-		if (adventure != null) {
-			adventure.close();
-			adventure = null;
-		}
 
 		configManager = null;
 	}

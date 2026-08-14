@@ -1,12 +1,10 @@
 package com.booksaw.betterTeams.extension;
 
 import com.booksaw.betterTeams.CommandResponse;
-import com.booksaw.betterTeams.Main;
 import com.booksaw.betterTeams.message.MessageConfig;
 import com.booksaw.betterTeams.message.MessageService;
 import com.booksaw.betterTeams.message.StaticMessage;
 import lombok.Getter;
-import net.kyori.adventure.platform.bukkit.BukkitAudiences;
 import org.bukkit.command.CommandSender;
 import org.jetbrains.annotations.NotNull;
 
@@ -26,13 +24,6 @@ public class ExtensionMessages {
         MessageConfig config = new MessageConfig(fileName, extension);
 
         this.messageService = new MessageService(config);
-
-        try {
-            BukkitAudiences audiences = Main.plugin.getAdventure();
-            this.messageService.setupMessageSender(audiences);
-        } catch (Exception e) {
-            this.messageService.setupMessageSender(null);
-        }
 
         if (config.has("prefix")) {
             this.messageService.loadPrefix("prefix");

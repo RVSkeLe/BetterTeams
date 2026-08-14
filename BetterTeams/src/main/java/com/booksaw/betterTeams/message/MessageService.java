@@ -5,7 +5,6 @@ import com.booksaw.betterTeams.text.Formatter;
 import com.booksaw.betterTeams.util.ComponentUtil;
 import com.booksaw.betterTeams.util.StringUtil;
 import lombok.Getter;
-import net.kyori.adventure.platform.bukkit.BukkitAudiences;
 import net.kyori.adventure.text.Component;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.command.CommandSender;
@@ -20,7 +19,7 @@ public class MessageService {
 	@Getter
 	private final MessageConfig messageConfig;
 
-	private MessageSender messageSender;
+	private final MessageSender messageSender;
 
 	@Getter
 	private Component prefixComponent;
@@ -32,24 +31,8 @@ public class MessageService {
 	 */
 	public MessageService(@NotNull MessageConfig messageConfig) {
 		this.messageConfig = messageConfig;
+		this.messageSender = new PaperMessageSender();
 		setPrefix("");
-	}
-
-	/**
-	 * Sets up the message sender with Adventure support.
-	 *
-	 * @param audiences The BukkitAudiences instance (null for legacy mode)
-	 */
-	public void setupMessageSender(@Nullable BukkitAudiences audiences) {
-		if (audiences != null) {
-			this.messageSender = new AdventureMessageSender(audiences);
-		} else {
-			this.messageSender = new LegacyMessageSender();
-		}
-	}
-
-	public void dumpMessageSender() {
-		this.messageSender = null;
 	}
 
 	public void setPrefix(@NotNull String prefix) {
@@ -108,7 +91,7 @@ public class MessageService {
 	 * @param replacements The placeholder replacements
 	 */
 	public void sendMessage(@Nullable CommandSender recipient, boolean doPrefix, @NotNull String reference, @NotNull Object... replacements) {
-		if (recipient == null || messageSender == null) return;
+		if (recipient == null) return;
 
 		String message = (recipient instanceof Player p) ? getMessage(p, reference, replacements) : getMessage(reference, replacements);
 		if (message.isEmpty()) return;
@@ -139,7 +122,7 @@ public class MessageService {
 	 * @param replacements The placeholder replacements
 	 */
 	public void sendMessage(@Nullable CommandSender recipient, @Nullable OfflinePlayer player, boolean doPrefix, @NotNull String reference, @NotNull Object... replacements) {
-		if (recipient == null || messageSender == null) return;
+		if (recipient == null) return;
 
 		String message = getMessage(player, reference, replacements);
 		if (message.isEmpty()) return;
@@ -169,7 +152,7 @@ public class MessageService {
 	 */
 	public void sendMessage(@NotNull Collection<? extends CommandSender> recipients, boolean doPrefix, @NotNull String reference, @NotNull Object... replacements) {
 		Collection<? extends CommandSender> filtered = Utils.filterNonNull(recipients);
-		if (filtered.isEmpty() || messageSender == null) return;
+		if (filtered.isEmpty()) return;
 
 		String message = getMessage(reference, replacements);
 		if (message.isEmpty()) return;
@@ -211,7 +194,7 @@ public class MessageService {
 	 */
 	public void sendMessage(@NotNull Collection<? extends CommandSender> recipients, @Nullable OfflinePlayer player, boolean doPrefix, @NotNull String reference, @NotNull Object... replacements) {
 		Collection<? extends CommandSender> filtered = Utils.filterNonNull(recipients);
-		if (filtered.isEmpty() || messageSender == null) return;
+		if (filtered.isEmpty()) return;
 
 		String message = getMessage(player, reference, replacements);
 		if (message.isEmpty()) return;
@@ -238,7 +221,7 @@ public class MessageService {
 	 * @param doPrefix  Whether to include the prefix
 	 */
 	public void sendFullMessage(@Nullable CommandSender recipient, @Nullable String message, boolean doPrefix) {
-		if (recipient == null || message == null || message.isEmpty() || messageSender == null) return;
+		if (recipient == null || message == null || message.isEmpty()) return;
 
 		Component component = Formatter.absolute().process(message);
 		messageSender.sendMessage(recipient, doPrefix ? combineWithPrefix(component) : component);
@@ -270,7 +253,7 @@ public class MessageService {
 	 * @param doPrefix  whether the message should be prefixed before being sent
 	 */
 	public void sendSafeMessage(@Nullable CommandSender recipient, @Nullable String message, boolean doPrefix) {
-		if (recipient == null || message == null || message.isEmpty() || messageSender == null) return;
+		if (recipient == null || message == null || message.isEmpty()) return;
 
 		Component component = Formatter.safe().process(message);
 		messageSender.sendMessage(recipient, doPrefix ? combineWithPrefix(component) : component);
@@ -284,7 +267,7 @@ public class MessageService {
 	 * @param doPrefix  Whether to include the prefix
 	 */
 	public void sendFullMessage(@Nullable CommandSender recipient, @Nullable Component message, boolean doPrefix) {
-		if (recipient == null || message == null || message.equals(Component.empty()) || messageSender == null) return;
+		if (recipient == null || message == null || message.equals(Component.empty())) return;
 
 		messageSender.sendMessage(recipient, doPrefix ? combineWithPrefix(message) : message);
 	}
@@ -308,7 +291,7 @@ public class MessageService {
 	 */
 	public void sendFullMessage(@NotNull Collection<? extends CommandSender> recipients, @Nullable String message, boolean doPrefix) {
 		Collection<? extends CommandSender> filtered = Utils.filterNonNull(recipients);
-		if (filtered.isEmpty() || message == null || message.isEmpty() || messageSender == null) return;
+		if (filtered.isEmpty() || message == null || message.isEmpty()) return;
 
 		Component component = Formatter.absolute().process(message);
 		messageSender.sendMessage(filtered, doPrefix ? combineWithPrefix(component) : component);
@@ -333,7 +316,7 @@ public class MessageService {
 	 */
 	public void sendFullMessage(@NotNull Collection<? extends CommandSender> recipients, @Nullable Component message, boolean doPrefix) {
 		Collection<? extends CommandSender> filtered = Utils.filterNonNull(recipients);
-		if (filtered.isEmpty() || message == null || message.equals(Component.empty()) || messageSender == null) return;
+		if (filtered.isEmpty() || message == null || message.equals(Component.empty())) return;
 
 		messageSender.sendMessage(filtered, doPrefix ? combineWithPrefix(message) : message);
 	}
@@ -358,7 +341,7 @@ public class MessageService {
 	 * @param replacements The placeholder replacements
 	 */
 	public void sendTitle(@Nullable Player recipient, boolean doPrefix, @NotNull String reference, @NotNull Object... replacements) {
-		if (recipient == null || messageSender == null) return;
+		if (recipient == null) return;
 
 		String message = getMessage(recipient, reference, replacements);
 		if (message.isEmpty()) return;
@@ -389,7 +372,7 @@ public class MessageService {
 	 * @param replacements The placeholder replacements
 	 */
 	public void sendTitle(@Nullable Player recipient, @Nullable OfflinePlayer player, boolean doPrefix, @NotNull String reference, @NotNull Object... replacements) {
-		if (recipient == null || messageSender == null) return;
+		if (recipient == null) return;
 
 		String message = getMessage(player, reference, replacements);
 		if (message.isEmpty()) return;
@@ -419,7 +402,7 @@ public class MessageService {
 	 */
 	public void sendTitle(@NotNull Collection<Player> recipients, boolean doPrefix, @NotNull String reference, @NotNull Object... replacements) {
 		Collection<Player> filtered = Utils.filterNonNull(recipients);
-		if (filtered.isEmpty() || messageSender == null) return;
+		if (filtered.isEmpty()) return;
 
 		String message = getMessage(reference, replacements);
 		if (message.isEmpty()) return;
@@ -456,7 +439,7 @@ public class MessageService {
 	 */
 	public void sendTitle(@NotNull Collection<Player> recipients, @Nullable OfflinePlayer player, boolean doPrefix, @NotNull String reference, @NotNull Object... replacements) {
 		Collection<Player> filtered = Utils.filterNonNull(recipients);
-		if (filtered.isEmpty() || messageSender == null) return;
+		if (filtered.isEmpty()) return;
 
 		String message = getMessage(player, reference, replacements);
 		if (message.isEmpty()) return;
@@ -483,7 +466,7 @@ public class MessageService {
 	 * @param doPrefix  Whether to include the prefix
 	 */
 	public void sendFullTitle(@Nullable Player recipient, @Nullable String message, boolean doPrefix) {
-		if (recipient == null || message == null || message.isEmpty() || messageSender == null) return;
+		if (recipient == null || message == null || message.isEmpty()) return;
 
 		Component component = Formatter.absolute().process(message);
 		messageSender.sendTitle(recipient, doPrefix ? combineWithPrefix(component) : component);
@@ -507,7 +490,7 @@ public class MessageService {
 	 * @param doPrefix  Whether to include the prefix
 	 */
 	public void sendFullTitle(@Nullable Player recipient, @Nullable Component message, boolean doPrefix) {
-		if (recipient == null || message == null || message.equals(Component.empty()) || messageSender == null) return;
+		if (recipient == null || message == null || message.equals(Component.empty())) return;
 
 		messageSender.sendTitle(recipient, doPrefix ? combineWithPrefix(message) : message);
 	}
@@ -531,7 +514,7 @@ public class MessageService {
 	 */
 	public void sendFullTitle(@NotNull Collection<Player> recipients, @Nullable String message, boolean doPrefix) {
 		Collection<Player> filtered = Utils.filterNonNull(recipients);
-		if (filtered.isEmpty() || message == null || message.isEmpty() || messageSender == null) return;
+		if (filtered.isEmpty() || message == null || message.isEmpty()) return;
 
 		Component component = Formatter.absolute().process(message);
 		messageSender.sendTitle(filtered, doPrefix ? combineWithPrefix(component) : component);
@@ -556,7 +539,7 @@ public class MessageService {
 	 */
 	public void sendFullTitle(@NotNull Collection<Player> recipients, @Nullable Component message, boolean doPrefix) {
 		Collection<Player> filtered = Utils.filterNonNull(recipients);
-		if (filtered.isEmpty() || message == null || message.equals(Component.empty()) || messageSender == null) return;
+		if (filtered.isEmpty() || message == null || message.equals(Component.empty())) return;
 
 		messageSender.sendTitle(filtered, doPrefix ? combineWithPrefix(message) : message);
 	}
@@ -581,7 +564,7 @@ public class MessageService {
 	 * @param replacements The placeholder replacements
 	 */
 	public void sendSubTitle(@Nullable Player recipient, boolean doPrefix, @NotNull String reference, @NotNull Object... replacements) {
-		if (recipient == null || messageSender == null) return;
+		if (recipient == null) return;
 
 		String message = getMessage(recipient, reference, replacements);
 		if (message.isEmpty()) return;
@@ -612,7 +595,7 @@ public class MessageService {
 	 * @param replacements The placeholder replacements
 	 */
 	public void sendSubTitle(@Nullable Player recipient, @Nullable OfflinePlayer player, boolean doPrefix, @NotNull String reference, @NotNull Object... replacements) {
-		if (recipient == null || messageSender == null) return;
+		if (recipient == null) return;
 
 		String message = getMessage(player, reference, replacements);
 		if (message.isEmpty()) return;
@@ -642,7 +625,7 @@ public class MessageService {
 	 */
 	public void sendSubTitle(@NotNull Collection<Player> recipients, boolean doPrefix, @NotNull String reference, @NotNull Object... replacements) {
 		Collection<Player> filtered = Utils.filterNonNull(recipients);
-		if (filtered.isEmpty() || messageSender == null) return;
+		if (filtered.isEmpty()) return;
 
 		String message = getMessage(reference, replacements);
 		if (message.isEmpty()) return;
@@ -679,7 +662,7 @@ public class MessageService {
 	 */
 	public void sendSubTitle(@NotNull Collection<Player> recipients, @Nullable OfflinePlayer player, boolean doPrefix, @NotNull String reference, @NotNull Object... replacements) {
 		Collection<Player> filtered = Utils.filterNonNull(recipients);
-		if (filtered.isEmpty() || messageSender == null) return;
+		if (filtered.isEmpty()) return;
 
 		String message = getMessage(player, reference, replacements);
 		if (message.isEmpty()) return;
@@ -706,7 +689,7 @@ public class MessageService {
 	 * @param doPrefix  Whether to include the prefix
 	 */
 	public void sendFullSubTitle(@Nullable Player recipient, @Nullable String message, boolean doPrefix) {
-		if (recipient == null || message == null || message.isEmpty() || messageSender == null) return;
+		if (recipient == null || message == null || message.isEmpty()) return;
 
 		Component component = Formatter.absolute().process(message);
 		messageSender.sendSubTitle(recipient, doPrefix ? combineWithPrefix(component) : component);
@@ -730,7 +713,7 @@ public class MessageService {
 	 * @param doPrefix  Whether to include the prefix
 	 */
 	public void sendFullSubTitle(@Nullable Player recipient, @Nullable Component message, boolean doPrefix) {
-		if (recipient == null || message == null || message.equals(Component.empty()) || messageSender == null) return;
+		if (recipient == null || message == null || message.equals(Component.empty())) return;
 
 		messageSender.sendSubTitle(recipient, doPrefix ? combineWithPrefix(message) : message);
 	}
@@ -754,7 +737,7 @@ public class MessageService {
 	 */
 	public void sendFullSubTitle(@NotNull Collection<Player> recipients, @Nullable String message, boolean doPrefix) {
 		Collection<Player> filtered = Utils.filterNonNull(recipients);
-		if (filtered.isEmpty() || message == null || message.isEmpty() || messageSender == null) return;
+		if (filtered.isEmpty() || message == null || message.isEmpty()) return;
 
 		Component component = Formatter.absolute().process(message);
 		messageSender.sendSubTitle(filtered, doPrefix ? combineWithPrefix(component) : component);
@@ -779,7 +762,7 @@ public class MessageService {
 	 */
 	public void sendFullSubTitle(@NotNull Collection<Player> recipients, @Nullable Component message, boolean doPrefix) {
 		Collection<Player> filtered = Utils.filterNonNull(recipients);
-		if (filtered.isEmpty() || message == null || message.equals(Component.empty()) || messageSender == null) return;
+		if (filtered.isEmpty() || message == null || message.equals(Component.empty())) return;
 
 		messageSender.sendSubTitle(filtered, doPrefix ? combineWithPrefix(message) : message);
 	}
@@ -805,7 +788,7 @@ public class MessageService {
 	 * @param doPrefixOnSub Whether to include prefix on subtitle
 	 */
 	public void sendFullTitleAndSub(@Nullable Player recipient, @Nullable String title, @Nullable String subTitle, boolean doPrefix, boolean doPrefixOnSub) {
-		if (recipient == null || messageSender == null) return;
+		if (recipient == null) return;
 
 		boolean titlePresent = title != null && !title.isEmpty();
 		boolean subTitlePresent = subTitle != null && !subTitle.isEmpty();
@@ -850,7 +833,7 @@ public class MessageService {
 	 */
 	public void sendFullTitleAndSub(@NotNull Collection<Player> recipients, @Nullable String title, @Nullable String subTitle, boolean doPrefix, boolean doPrefixOnSub) {
 		Collection<Player> filtered = Utils.filterNonNull(recipients);
-		if (filtered.isEmpty() || messageSender == null) return;
+		if (filtered.isEmpty()) return;
 
 		boolean titlePresent = title != null && !title.isEmpty();
 		boolean subTitlePresent = subTitle != null && !subTitle.isEmpty();
@@ -894,7 +877,7 @@ public class MessageService {
 	 * @param doPrefixOnSub Whether to include prefix on subtitle
 	 */
 	public void sendFullTitleAndSub(@Nullable Player recipient, @Nullable Component title, @Nullable Component subTitle, boolean doPrefix, boolean doPrefixOnSub) {
-		if (recipient == null || messageSender == null) return;
+		if (recipient == null) return;
 
 		boolean titlePresent = title != null && !title.equals(Component.empty());
 		boolean subTitlePresent = subTitle != null && !subTitle.equals(Component.empty());
@@ -934,7 +917,7 @@ public class MessageService {
 	 */
 	public void sendFullTitleAndSub(@NotNull Collection<Player> recipients, @Nullable Component title, @Nullable Component subTitle, boolean doPrefix, boolean doPrefixOnSub) {
 		Collection<Player> filtered = Utils.filterNonNull(recipients);
-		if (filtered.isEmpty() || messageSender == null) return;
+		if (filtered.isEmpty()) return;
 
 		boolean titlePresent = title != null && !title.equals(Component.empty());
 		boolean subTitlePresent = subTitle != null && !subTitle.equals(Component.empty());
@@ -960,17 +943,14 @@ public class MessageService {
 	 * @param replacements The placeholder replacements
 	 */
 	public void sendActionBar(@Nullable Player recipient, @NotNull String reference, @NotNull Object... replacements) {
-		if (recipient == null || messageSender == null) return;
+		if (recipient == null) return;
 
 		String message = getMessage(recipient, reference, replacements);
 		if (message.isEmpty()) return;
 
 		Component component = Formatter.absolute().process(message);
 
-		// Action bar doesn't typically use prefix, but we can add if needed
-		if (messageSender instanceof AdventureMessageSender adventureSender) {
-			adventureSender.sendActionBar(recipient, component);
-		}
+		messageSender.sendActionBar(recipient, component);
 	}
 
 	/**
@@ -980,13 +960,11 @@ public class MessageService {
 	 * @param message   The raw action bar string
 	 */
 	public void sendFullActionBar(@Nullable Player recipient, @Nullable String message) {
-		if (recipient == null || message == null || message.isEmpty() || messageSender == null) return;
+		if (recipient == null || message == null || message.isEmpty()) return;
 
 		Component component = Formatter.absolute().process(message);
 
-		if (messageSender instanceof AdventureMessageSender adventureSender) {
-			adventureSender.sendActionBar(recipient, component);
-		}
+		messageSender.sendActionBar(recipient, component);
 	}
 
 	@NotNull

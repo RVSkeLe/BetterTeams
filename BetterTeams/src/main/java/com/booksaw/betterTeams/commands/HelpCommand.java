@@ -4,14 +4,8 @@ import com.booksaw.betterTeams.CommandResponse;
 import com.booksaw.betterTeams.Main;
 import com.booksaw.betterTeams.message.MessageManager;
 import com.booksaw.betterTeams.text.Formatter;
-import com.booksaw.betterTeams.text.LegacyTextUtils;
 import net.kyori.adventure.text.Component;
 import net.md_5.bungee.api.ChatColor;
-import net.md_5.bungee.api.chat.ClickEvent;
-import net.md_5.bungee.api.chat.ClickEvent.Action;
-import net.md_5.bungee.api.chat.HoverEvent;
-import net.md_5.bungee.api.chat.TextComponent;
-import net.md_5.bungee.api.chat.hover.content.Text;
 import org.bukkit.command.CommandSender;
 
 import java.io.BufferedReader;
@@ -160,19 +154,6 @@ public class HelpCommand extends SubCommand {
 
 		return prefix + "/" + label + " " + commandPath + ChatColor.WHITE + " - " + HelpCommand.description
 				+ description;
-	}
-
-	public TextComponent createClickableHelpMessage(String label, String commandPath, String description) {
-
-		TextComponent message = new TextComponent(
-				LegacyTextUtils.parseAdventure(MessageManager.getPrefix() + prefix + "/" + label + " " + commandPath
-						+ ChatColor.WHITE + " - " + HelpCommand.description
-						+ description));
-		message.setClickEvent(new ClickEvent(Action.SUGGEST_COMMAND, "/" + label + " " + commandPath));
-		message.setHoverEvent(
-				new HoverEvent(HoverEvent.Action.SHOW_TEXT, new Text(prefix + "/" + label + " " + commandPath)));
-
-		return message;
 	}
 
 	public Component createClickableHelpMiniMessage(String label, String commandPath, String description) {

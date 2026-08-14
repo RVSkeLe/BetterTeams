@@ -2,14 +2,12 @@ package com.booksaw.betterTeams.message;
 
 import com.booksaw.betterTeams.Main;
 import lombok.Getter;
-import net.kyori.adventure.platform.bukkit.BukkitAudiences;
 import net.kyori.adventure.text.Component;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.command.CommandSender;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
-import org.jetbrains.annotations.ApiStatus.Internal;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -26,8 +24,6 @@ public class MessageManager {
 	@Getter
 	private static MessageService mainPluginService;
 
-	private static BukkitAudiences audiences;
-
 	/**
 	 * Stopping this class being instantiated
 	 */
@@ -40,20 +36,6 @@ public class MessageManager {
 
 		String prefix = Main.plugin.getConfig().getString("prefixFormat", "");
 		mainPluginService.setPrefix(prefix);
-		mainPluginService.setupMessageSender(audiences);
-	}
-
-	/**
-	 * Used to instantiate a new MessageSender.
-	 * <p>
-	 * Warning: This is not API, so it should never be used outside BetterTeams' package
-	 */
-	@Internal
-	public static void setupMessageSender(BukkitAudiences audiences) {
-		MessageManager.audiences = audiences;
-		if (mainPluginService != null) {
-			mainPluginService.setupMessageSender(audiences);
-		}
 	}
 
 	public static void addBackupMessages(YamlConfiguration file) {

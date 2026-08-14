@@ -25,5 +25,9 @@ interface MessageSender {
     void sendTitleAndSub(@NotNull Player recipient, @NotNull Component title, @NotNull Component subtitle);
 
     void sendTitleAndSub(@NotNull Collection<Player> recipients, @NotNull Component title, @NotNull Component subtitle);
+
+    void sendActionBar(@NotNull Player recipient, @NotNull Component message);
+
+    void sendActionBar(@NotNull Collection<Player> recipients, @NotNull Component message);
     
 }
