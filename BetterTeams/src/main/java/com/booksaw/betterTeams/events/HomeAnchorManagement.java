@@ -67,7 +67,7 @@ public class HomeAnchorManagement implements Listener {
 		if (e.isBedSpawn() && plugin.getConfig().getBoolean("anchor.ignoreBedRespawn", false))
 			return;
 
-        Team team = Team.getTeam(e.getPlayer());
+        Team team = Team.getTeamByPlayer(e.getPlayer());
         if (team == null || !team.isAnchored()) return;
 
         TeamPlayer teamPlayer = team.getTeamPlayer(e.getPlayer());

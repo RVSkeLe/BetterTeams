@@ -16,7 +16,7 @@ public class TitleTeama extends SubCommand {
 
 	@Override
 	public CommandResponse onCommand(CommandSender sender, String label, String[] args) {
-		Team team = Team.getTeam(Bukkit.getPlayer(args[0]));
+		Team team = Team.getTeamByPlayer(Bukkit.getPlayer(args[0]));
 
 		if (team == null) {
 			return new CommandResponse("admin.inTeam");

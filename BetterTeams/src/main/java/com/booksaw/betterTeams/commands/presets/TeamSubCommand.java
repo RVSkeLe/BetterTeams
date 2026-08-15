@@ -40,7 +40,7 @@ public abstract class TeamSubCommand extends SubCommand {
 
 	private Team getTeam(CommandSender sender) {
 		if (sender instanceof Player) {
-			return Team.getTeam((Player) sender);
+			return Team.getTeamByPlayer((Player) sender);
 		}
 		return null;
 	}
@@ -58,7 +58,7 @@ public abstract class TeamSubCommand extends SubCommand {
 	@Override
 	public CommandResponse onCommand(CommandSender sender, String label, String[] args) {
 		Player player = (Player) sender;
-		Team team = Team.getTeam(player);
+		Team team = Team.getTeamByPlayer(player);
 
 		if (team == null) {
 			return new CommandResponse("inTeam");
@@ -147,7 +147,7 @@ public abstract class TeamSubCommand extends SubCommand {
 			return new TeamPlayerResult("noPlayer");
 		}
 
-		Team otherTeam = Team.getTeam(player);
+		Team otherTeam = Team.getTeamByPlayer(player);
 		if (team != otherTeam) {
 			return new TeamPlayerResult("needSameTeam");
 		}

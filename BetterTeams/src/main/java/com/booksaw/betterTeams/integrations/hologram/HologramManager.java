@@ -72,7 +72,7 @@ public abstract class HologramManager {
 
 		holo.appendText(LegacyTextUtils.parseAdventure(MessageManager.getMessage("holo.leaderboard")));
 		for (int i = 0; i < maxHologramLines && i < teams.length; i++) {
-			Team team = Team.getTeam(teams[i]);
+			Team team = Team.getTeamByTeamName(teams[i]);
 			if (team == null) {
 				Main.plugin.getLogger().severe("A team was null for an unexplained reason, team name: " + teams[i]);
 				continue;

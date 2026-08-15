@@ -87,7 +87,7 @@ class TeamPlaceholdersTest {
 		@Test
 		@DisplayName("Should return 'not in team' message for %betterteams_inTeam% when player is not in a team")
 		void testPlayerNotInTeamForInTeamPlaceholder() {
-			when(mockTeamManager.isInTeam(mockPlayer)).thenReturn(false);
+			when(mockTeamManager.isPlayerInTeam(mockPlayer)).thenReturn(false);
 			String result = teamPlaceholders.onRequest(mockPlayer, "inTeam");
 			assertEquals("msg:placeholder.notinteam", result);
 		}
@@ -95,7 +95,7 @@ class TeamPlaceholdersTest {
 		@Test
 		@DisplayName("Should return 'in team' message for %betterteams_inTeam% when player is in a team")
 		void testPlayerInTeamForInTeamPlaceholder() {
-			when(mockTeamManager.isInTeam(mockPlayer)).thenReturn(true);
+			when(mockTeamManager.isPlayerInTeam(mockPlayer)).thenReturn(true);
 			String result = teamPlaceholders.onRequest(mockPlayer, "inTeam");
 			assertEquals("msg:placeholder.inteam", result);
 		}
@@ -103,7 +103,7 @@ class TeamPlaceholdersTest {
 		@Test
 		@DisplayName("Should return 'no team' message if player is not in a team for a team-specific placeholder")
 		void testPlayerNotInTeamForTeamSpecificPlaceholder() {
-			teamStatic.when(() -> Team.getTeam(mockPlayer)).thenReturn(null);
+			teamStatic.when(() -> Team.getTeamByPlayer(mockPlayer)).thenReturn(null);
 			String result = teamPlaceholders.onRequest(mockPlayer, "name");
 			assertEquals("msg:placeholder.noTeam", result);
 		}
@@ -111,7 +111,7 @@ class TeamPlaceholdersTest {
 		@Test
 		@DisplayName("Should handle a standard placeholder request correctly")
 		void testStandardPlaceholderRequest() {
-			teamStatic.when(() -> Team.getTeam(mockPlayer)).thenReturn(mockTeam);
+			teamStatic.when(() -> Team.getTeamByPlayer(mockPlayer)).thenReturn(mockTeam);
 			when(mockTeam.getTeamPlayer(mockPlayer)).thenReturn(mockTeamPlayer);
 			placeholderServiceStatic.when(() -> TeamPlaceholderService.getPlaceholder("name", mockTeam, mockTeamPlayer))
 					.thenReturn("TeamAlpha");
@@ -127,7 +127,7 @@ class TeamPlaceholdersTest {
 		void testDataPlaceholderRequest() {
 			String identifier = "meta_SomeKey";
 
-			teamStatic.when(() -> Team.getTeam(mockPlayer)).thenReturn(mockTeam);
+			teamStatic.when(() -> Team.getTeamByPlayer(mockPlayer)).thenReturn(mockTeam);
 			when(mockTeam.getTeamPlayer(mockPlayer)).thenReturn(mockTeamPlayer);
 			placeholderServiceStatic.when(() -> TeamPlaceholderService.requiresData("meta")).thenReturn(true);
 			placeholderServiceStatic.when(() -> TeamPlaceholderService.getPlaceholder("meta", mockTeam, mockTeamPlayer, "SomeKey"))
@@ -149,7 +149,7 @@ class TeamPlaceholdersTest {
 		void testRankedPlaceholder_Score() {
 			String[] sortedTeams = {"TeamBravo", "TeamAlpha"};
 			when(mockTeamManager.sortTeamsByScore()).thenReturn(sortedTeams);
-			teamStatic.when(() -> Team.getTeam("TeamAlpha")).thenReturn(mockTeam);
+			teamStatic.when(() -> Team.getTeamByTeamName("TeamAlpha")).thenReturn(mockTeam);
 			placeholderServiceStatic.when(() -> TeamPlaceholderService.getPlaceholder("name", mockTeam, null))
 					.thenReturn("TeamAlpha");
 
@@ -163,7 +163,7 @@ class TeamPlaceholdersTest {
 		void testRankedPlaceholder_Balance() {
 			String[] sortedTeams = {"TeamBravo", "TeamAlpha"};
 			when(mockTeamManager.sortTeamsByBalance()).thenReturn(sortedTeams);
-			teamStatic.when(() -> Team.getTeam("TeamBravo")).thenReturn(mockTeam);
+			teamStatic.when(() -> Team.getTeamByTeamName("TeamBravo")).thenReturn(mockTeam);
 			placeholderServiceStatic.when(() -> TeamPlaceholderService.getPlaceholder("name", mockTeam, null))
 					.thenReturn("TeamBravo");
 
@@ -191,7 +191,7 @@ class TeamPlaceholdersTest {
 		@Test
 		@DisplayName("Should resolve a static team placeholder successfully")
 		void testStaticTeamPlaceholder_Success() {
-			teamStatic.when(() -> Team.getTeam("myteam")).thenReturn(mockTeam);
+			teamStatic.when(() -> Team.getTeamByTeamName("myteam")).thenReturn(mockTeam);
 			placeholderServiceStatic.when(() -> TeamPlaceholderService.getPlaceholder("score", mockTeam, null))
 					.thenReturn("100");
 
@@ -202,7 +202,7 @@ class TeamPlaceholdersTest {
 		@Test
 		@DisplayName("Should return 'no team' message if static team placeholder team is not found")
 		void testStaticTeamPlaceholder_TeamNotFound() {
-			teamStatic.when(() -> Team.getTeam("noteam")).thenReturn(null);
+			teamStatic.when(() -> Team.getTeamByTeamName("noteam")).thenReturn(null);
 
 			String result = teamPlaceholders.onRequest(null, "static_score_NoTeam");
 			assertEquals("msg:placeholder.noTeam", result);
@@ -213,7 +213,7 @@ class TeamPlaceholdersTest {
 		void testStaticPlayerPlaceholder_Success() {
 			String playerName = "testplayer";
 			utilsStatic.when(() -> Utils.getOfflinePlayer(playerName)).thenReturn(mockOfflinePlayer);
-			teamStatic.when(() -> Team.getTeam(mockOfflinePlayer)).thenReturn(mockTeam);
+			teamStatic.when(() -> Team.getTeamByPlayer(mockOfflinePlayer)).thenReturn(mockTeam);
 			when(mockTeam.getTeamPlayer(mockOfflinePlayer)).thenReturn(mockTeamPlayer);
 			placeholderServiceStatic.when(() -> TeamPlaceholderService.getPlaceholder("rank", mockTeam, mockTeamPlayer))
 					.thenReturn("Admin");
@@ -242,7 +242,7 @@ class TeamPlaceholdersTest {
 		@DisplayName("Should cache the result of a static placeholder request")
 		void testStaticPlaceholderIsCached() {
 			// --- First Request ---
-			teamStatic.when(() -> Team.getTeam("myteam")).thenReturn(mockTeam);
+			teamStatic.when(() -> Team.getTeamByTeamName("myteam")).thenReturn(mockTeam);
 			placeholderServiceStatic.when(() -> TeamPlaceholderService.getPlaceholder("score", mockTeam, null))
 					.thenReturn("100");
 
@@ -266,7 +266,7 @@ class TeamPlaceholdersTest {
 		@Test
 		@DisplayName("invalidateCache() should clear the cache")
 		void testInvalidateCache() {
-			teamStatic.when(() -> Team.getTeam("myteam")).thenReturn(mockTeam);
+			teamStatic.when(() -> Team.getTeamByTeamName("myteam")).thenReturn(mockTeam);
 			placeholderServiceStatic.when(() -> TeamPlaceholderService.getPlaceholder("score", mockTeam, null))
 					.thenReturn("100");
 
@@ -285,7 +285,7 @@ class TeamPlaceholdersTest {
 		@Test
 		@DisplayName("Should not cache player-specific placeholder requests")
 		void testPlayerSpecificPlaceholderIsNotCached() {
-			teamStatic.when(() -> Team.getTeam(mockPlayer)).thenReturn(mockTeam);
+			teamStatic.when(() -> Team.getTeamByPlayer(mockPlayer)).thenReturn(mockTeam);
 			when(mockTeam.getTeamPlayer(mockPlayer)).thenReturn(mockTeamPlayer);
 			placeholderServiceStatic.when(() -> TeamPlaceholderService.getPlaceholder("name", mockTeam, mockTeamPlayer))
 					.thenReturn("TeamAlpha");

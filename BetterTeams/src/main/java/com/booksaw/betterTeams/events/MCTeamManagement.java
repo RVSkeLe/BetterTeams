@@ -46,7 +46,7 @@ public class MCTeamManagement implements Listener {
 	public void displayBelowName(Player player) {
 		player.setScoreboard(board);
 
-		Team team = Team.getTeam(player);
+		Team team = Team.getTeamByPlayer(player);
 		if (team == null) {
 			return;
 		}
@@ -107,7 +107,7 @@ public class MCTeamManagement implements Listener {
 			return;
 		}
 
-		Team team = Team.getTeam(player);
+		Team team = Team.getTeamByPlayer(player);
 		if (team == null) {
 			return;
 		}

@@ -78,18 +78,18 @@ public class SQLiteStorageManager extends TeamManager {
 
 	@Override
 	@Contract(pure = true, value = "null -> false")
-	public boolean isTeam(@Nullable UUID uuid) {
+	public boolean isTeamId(@Nullable UUID uuid) {
 		return uuid != null && loadedTeams.containsKey(uuid) && !deletedTeams.contains(uuid);
 	}
 
 	@Override
 	@Contract(pure = true, value = "null -> false")
-	public boolean isTeam(@Nullable String name) {
+	public boolean isTeamName(@Nullable String name) {
 		return name != null && teamNameIndex.containsKey(normalizeName(name));
 	}
 
 	@Override
-	public UUID getTeamUUID(String name) {
+	public UUID getTeamIdByTeamName(String name) {
 		return name == null ? null : teamNameIndex.get(normalizeName(name));
 	}
 
@@ -129,7 +129,7 @@ public class SQLiteStorageManager extends TeamManager {
 	}
 
 	public void unloadTeam(UUID uuid) {
-		Team team = Team.getTeam(uuid);
+		Team team = Team.getTeamByTeamId(uuid);
 		if (team != null) {
 			team.saveEchest();
 			if (team.getScoreboardTeamOrNull() != null) {

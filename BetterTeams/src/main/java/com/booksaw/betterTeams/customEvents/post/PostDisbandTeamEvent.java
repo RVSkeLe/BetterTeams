@@ -56,7 +56,7 @@ public class PostDisbandTeamEvent extends TeamEvent {
 		if (processedAllies == null) {
 			processedAllies = new HashSet<>();
 			for (UUID uuid : prevAllies) {
-				Team team = Team.getTeam(uuid);
+				Team team = Team.getTeamByTeamId(uuid);
 				if (team != null) {
 					processedAllies.add(team);
 				}

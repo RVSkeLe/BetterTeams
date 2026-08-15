@@ -14,7 +14,7 @@ public class AllyManagement implements Listener {
 
 	@EventHandler
 	public void onJoin(PlayerJoinEvent e) {
-		Team team = Team.getTeam(e.getPlayer());
+		Team team = Team.getTeamByPlayer(e.getPlayer());
 		if (team == null) {
 			return;
 		}

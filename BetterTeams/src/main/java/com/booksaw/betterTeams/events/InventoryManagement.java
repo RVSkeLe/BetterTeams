@@ -32,7 +32,7 @@ public class InventoryManagement implements Listener {
 		Team t = adminViewers.get((Player) e.getPlayer());
 
 		if (t == null) {
-			t = Team.getTeam((Player) e.getPlayer());
+			t = Team.getTeamByPlayer((Player) e.getPlayer());
 			if (t == null) {
 				return;
 			}

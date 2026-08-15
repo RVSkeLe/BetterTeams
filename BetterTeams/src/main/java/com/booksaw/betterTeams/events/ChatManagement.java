@@ -39,7 +39,7 @@ public class ChatManagement implements Listener {
 		}
 
 		Player p = event.getPlayer();
-		Team team = Team.getTeam(p);
+		Team team = Team.getTeamByPlayer(p);
 
 		if (team == null) {
 			return;

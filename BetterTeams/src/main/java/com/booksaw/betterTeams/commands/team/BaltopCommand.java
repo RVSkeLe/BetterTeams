@@ -18,7 +18,7 @@ public class BaltopCommand extends SubCommand {
 		Team teamPre = null;
 
 		if (sender instanceof Player) {
-			teamPre = Team.getTeam((Player) sender);
+			teamPre = Team.getTeamByPlayer((Player) sender);
 		}
 
 		Team team = teamPre;
@@ -31,7 +31,7 @@ public class BaltopCommand extends SubCommand {
 			MessageManager.sendMessage(sender, "baltop.leaderboard");
 
 			for (int i = 0; i < 10 && i < teams.length; i++) {
-				Team tempTeam = Team.getTeam(teams[i]);
+				Team tempTeam = Team.getTeamByTeamName(teams[i]);
 				if (tempTeam == null) {
 					Main.plugin.getLogger().severe("Could not load team `" + teams[i] + "` from SQLite storage");
 					continue;
@@ -54,14 +54,14 @@ public class BaltopCommand extends SubCommand {
 					if (rank != 0) {
 						MessageManager.sendMessage(sender, "baltop.divide");
 						if (rank - 2 > 9) {
-							Team tm2 = Team.getTeam(teams[rank - 2]);
+							Team tm2 = Team.getTeamByTeamName(teams[rank - 2]);
 							MessageManager.sendMessage(sender, "baltop.syntax", rank - 1, tm2.getName(), tm2.getBalance());
 						}
 
 						MessageManager.sendMessage(sender, "baltop.syntax", rank, team.getName(), team.getBalance());
 
 						if (teams.length > rank) {
-							Team tm = Team.getTeam(teams[rank]);
+							Team tm = Team.getTeamByTeamName(teams[rank]);
 							MessageManager.sendMessage(sender, "baltop.syntax", rank + 1, tm.getName(), tm.getBalance());
 						}
 					}

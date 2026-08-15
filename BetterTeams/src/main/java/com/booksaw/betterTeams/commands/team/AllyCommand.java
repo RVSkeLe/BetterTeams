@@ -22,7 +22,7 @@ public class AllyCommand extends TeamSubCommand {
 			StringBuilder requests = new StringBuilder();
 			for (UUID uuid : team.getAllyRequests()) {
 
-				Team uuidteam = Team.getTeam(uuid);
+				Team uuidteam = Team.getTeamByTeamId(uuid);
 				if (uuidteam == null) {
 					continue;
 				}
@@ -39,7 +39,7 @@ public class AllyCommand extends TeamSubCommand {
 			}
 		}
 
-		Team toAlly = Team.getTeam(args[0]);
+		Team toAlly = Team.getTeamByTeamName(args[0]);
 		if (toAlly == null) {
 			return new CommandResponse("noTeam");
 		} else if (toAlly == team) {

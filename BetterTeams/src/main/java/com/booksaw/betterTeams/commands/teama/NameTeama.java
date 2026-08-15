@@ -17,7 +17,7 @@ public class NameTeama extends TeamSelectSubCommand {
 			return response;
 		}
 
-		if (Team.getTeam(args[1]) != null) {
+		if (Team.getTeamByTeamName(args[1]) != null) {
 			return new CommandResponse("name.exists");
 		}
 

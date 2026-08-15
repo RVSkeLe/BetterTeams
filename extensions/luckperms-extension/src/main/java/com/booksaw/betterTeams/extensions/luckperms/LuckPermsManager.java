@@ -25,7 +25,7 @@ public class LuckPermsManager implements ContextCalculator<Player> {
 
     @Override
     public void calculate(@NotNull Player player, @NotNull ContextConsumer consumer) {
-        Team team = Team.getTeam(player);
+        Team team = Team.getTeamByPlayer(player);
 
         if (config.getBoolean("contexts.bt_inteam", true)) {
             consumer.accept("bt_inteam", String.valueOf(team != null));

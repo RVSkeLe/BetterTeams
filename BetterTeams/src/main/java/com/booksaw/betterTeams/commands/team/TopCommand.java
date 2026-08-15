@@ -18,7 +18,7 @@ public class TopCommand extends SubCommand {
 		Team teamPre = null;
 
 		if (sender instanceof Player) {
-			teamPre = Team.getTeam((Player) sender);
+			teamPre = Team.getTeamByPlayer((Player) sender);
 		}
 
 		Team team = teamPre;
@@ -36,7 +36,7 @@ public class TopCommand extends SubCommand {
 					Main.plugin.getLogger().severe("Team at position [" + i + "] had a null name");
 					continue;
 				}
-				Team tempTeam = Team.getTeam(teams[i]);
+				Team tempTeam = Team.getTeamByTeamName(teams[i]);
 				sendTopSyntaxMessage(sender, i + 1, tempTeam, teams[i]);
 				if (team == tempTeam) {
 					contained = true;
@@ -55,14 +55,14 @@ public class TopCommand extends SubCommand {
 					if (rank != 0) {
 						MessageManager.sendMessage(sender, "top.divide");
 						if (rank - 2 > 9) {
-							Team tm2 = Team.getTeam(teams[rank - 2]);
+							Team tm2 = Team.getTeamByTeamName(teams[rank - 2]);
 							sendTopSyntaxMessage(sender, rank - 1, tm2, teams[rank - 2]);
 						}
 
 						sendTopSyntaxMessage(sender, rank, team, "CommandSenders Team");
 
 						if (teams.length > rank) {
-							Team tm = Team.getTeam(teams[rank]);
+							Team tm = Team.getTeamByTeamName(teams[rank]);
 							sendTopSyntaxMessage(sender, (rank + 1), tm, teams[rank]);
 						}
 					}

@@ -21,7 +21,7 @@ public class NeutralCommand extends TeamSubCommand {
 	public CommandResponse onCommand(TeamPlayer player, String label, String[] args, Team team) {
 
 		// getting the referenced team
-		Team toNeutral = Team.getTeam(args[0]);
+		Team toNeutral = Team.getTeamByTeamName(args[0]);
 		if (toNeutral == null) {
 			return new CommandResponse("noTeam");
 		} else if (toNeutral == team) {

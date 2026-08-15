@@ -30,7 +30,7 @@ public class InviteCommand extends TeamSubCommand {
 			return new CommandResponse("invite.banned");
 		}
 
-		if (Team.getTeam(toInvite) != null) {
+		if (Team.getTeamByPlayer(toInvite) != null) {
 			return new CommandResponse("invite.inTeam");
 		}
 

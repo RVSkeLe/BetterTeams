@@ -45,7 +45,7 @@ public class CreateCommand extends NoTeamSubCommand {
 			}
 		}
 
-		if (Team.getTeamManager().isTeam(args[0])) {
+		if (Team.getTeamManager().isTeamName(args[0])) {
 			return new CommandResponse("create.exists");
 		}
 

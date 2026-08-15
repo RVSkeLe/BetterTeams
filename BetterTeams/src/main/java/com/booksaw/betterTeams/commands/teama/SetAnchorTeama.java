@@ -14,7 +14,7 @@ public class SetAnchorTeama extends SubCommand {
     @Override
     public CommandResponse onCommand(CommandSender sender, String label, String[] args) {
         
-        Team team = Team.getTeam(args[0]);
+        Team team = Team.getTeamByTeamName(args[0]);
         if (team == null)
             return new CommandResponse(false, "noTeam");
 

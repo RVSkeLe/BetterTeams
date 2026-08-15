@@ -19,7 +19,7 @@ public class AnchorTeama extends SubCommand {
         if (p == null)
             return new CommandResponse("noPlayer");
 
-        Team team = Team.getTeam(p);
+        Team team = Team.getTeamByPlayer(p);
         if (team == null)
             return new CommandResponse("admin.inTeam");
 

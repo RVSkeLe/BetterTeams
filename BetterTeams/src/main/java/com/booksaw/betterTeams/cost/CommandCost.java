@@ -41,7 +41,7 @@ public class CommandCost {
 		}
 		double cost = this.cost;
 		if (CostManager.costFromTeam) {
-			Team team = Team.getTeam(player);
+			Team team = Team.getTeamByPlayer(player);
 
 			if (team != null) {
 				if (team.getMoney() >= cost) {
@@ -76,7 +76,7 @@ public class CommandCost {
 
 		double cost = this.cost;
 		if (CostManager.costFromTeam) {
-			Team team = Team.getTeam(player);
+			Team team = Team.getTeamByPlayer(player);
 
 			if (team != null) {
 				if (team.getMoney() >= cost) {

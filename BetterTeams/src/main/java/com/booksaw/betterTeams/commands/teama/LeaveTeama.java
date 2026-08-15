@@ -20,7 +20,7 @@ public class LeaveTeama extends SubCommand {
 			return new CommandResponse("noPlayer");
 		}
 
-		Team team = Team.getTeam(p);
+		Team team = Team.getTeamByPlayer(p);
 		if (team == null) {
 			return new CommandResponse("admin.inTeam");
 		}

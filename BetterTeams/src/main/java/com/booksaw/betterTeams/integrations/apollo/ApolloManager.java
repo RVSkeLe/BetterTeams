@@ -66,7 +66,7 @@ public class ApolloManager implements Listener {
 		apolloPlayers.add(player.getUniqueId());
 
 		// Instant refresh
-		Team team = Team.getTeam(player);
+		Team team = Team.getTeamByPlayer(player);
 		if (team != null) {
 			refreshTeam(team);
 		}

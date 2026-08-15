@@ -44,12 +44,16 @@ Or if your plugin is reliant on betterTeams to work as expected: `depend: [Bette
 As teams are the fundamental system which this plugin is based off. Most of the time the first thing you will need to do
 is get the Team that you need, this can be done using several values:
 
-* With a player who is in a team: `Team.getTeam(Player player)` This static method will return the team that the player
+* With a player who is in a team: `Team.getTeamByPlayer(Player player)` This static method will return the team that the
+  player is in, or null if they are not in a team.
+* With a player UUID: `Team.getTeamByPlayerId(UUID playerUUID)` This static method will return the team that the player
   is in, or null if they are not in a team.
-* With a team name: `Team.getTeam(String teamName)` This static method will return the team that has that name. like
-  Minecraft player names, this should only be used when allowing a player to run a command, this is because team names
-  can be changed.
-* With the team UUID: `Team.getTeam(UUID teamUUID)` This is the recommended method when storing a reference to a team,
+* With a player name: `Team.getTeamByPlayerName(String playerName)` This static method uses the player identity cache to
+  resolve known online or offline players.
+* With a team name: `Team.getTeamByTeamName(String teamName)` This static method will return the team that has that name.
+  Like Minecraft player names, this should only be used when allowing a player to run a command, this is because team
+  names can be changed.
+* With a team UUID: `Team.getTeamByTeamId(UUID teamUUID)` This is the recommended method when storing a reference to a team,
   this is because it will remain constant for the entire existence of a team.  
   Once you have a team view
   the [Team class](https://songoda.com/marketplace/product/ultimateclaims-the-ultimate-claiming-plugin.65) to see what

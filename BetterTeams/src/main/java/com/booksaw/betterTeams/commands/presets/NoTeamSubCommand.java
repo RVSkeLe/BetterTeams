@@ -17,7 +17,7 @@ public abstract class NoTeamSubCommand extends SubCommand {
 	@Override
 	public CommandResponse onCommand(CommandSender sender, String label, String[] args) {
 		Player player = (Player) sender;
-		Team team = Team.getTeam(player);
+		Team team = Team.getTeamByPlayer(player);
 
 		if (team != null) {
 			return new CommandResponse("notInTeam");

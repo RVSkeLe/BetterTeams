@@ -64,29 +64,29 @@ public abstract class TeamManager {
 	}
 
 	/**
-	 * Used to get the team with the provided ID
+	 * Used to get the team with the provided team ID.
 	 *
-	 * @param uuid the ID of the team
+	 * @param teamId the ID of the team
 	 * @return the team with that ID [null - the team does not exist]
 	 */
 	@Nullable
 	@Contract(pure = true, value = "null -> null")
-	public Team getTeam(@Nullable UUID uuid) {
-		if (uuid == null) {
+	public Team getTeamByTeamId(@Nullable UUID teamId) {
+		if (teamId == null) {
 			return null;
 		}
 
-		if (loadedTeams.containsKey(uuid)) {
-			return loadedTeams.get(uuid);
+		if (loadedTeams.containsKey(teamId)) {
+			return loadedTeams.get(teamId);
 		}
 
-		if (!isTeam(uuid)) {
+		if (!isTeamId(teamId)) {
 			return null;
 		}
 
 		try {
-			Team team = new Team(uuid);
-			loadedTeams.put(uuid, team);
+			Team team = new Team(teamId);
+			loadedTeams.put(teamId, team);
 			indexTeamPlayers(team);
 			return team;
 		} catch (IllegalArgumentException e) {
@@ -95,29 +95,23 @@ public abstract class TeamManager {
 	}
 
 	/**
-	 * Used to get the team by it's display name or a player within it
+	 * Used to get a team by a team name first, then by a player name.
 	 *
-	 * @param name the display name of the team or an online player within the team
+	 * @param identifier the display name of the team or a player within the team
 	 * @return the team which matches the data[null - no team could be found]
 	 */
 	@Nullable
 	@Contract(pure = true, value = "null -> null")
-	public Team getTeam(@Nullable String name) {
-		if (name == null)
+	public Team getTeamByTeamOrPlayerName(@Nullable String identifier) {
+		if (identifier == null)
 			return null;
 
-		Team team = getTeamByName(name);
+		Team team = getTeamByTeamName(identifier);
 		if (team != null) {
 			return team;
 		}
 
-		// trying to get team by a player name
-		OfflinePlayer player = Bukkit.getPlayer(name);
-		if (player == null) {
-			return null;
-		}
-		return getTeam(player);
-
+		return getTeamByPlayerName(identifier);
 	}
 
 	/**
@@ -128,17 +122,36 @@ public abstract class TeamManager {
 	 */
 	@Nullable
 	@Contract(pure = true, value = "null -> null")
-	public Team getTeam(@Nullable OfflinePlayer player) {
+	public Team getTeamByPlayer(@Nullable OfflinePlayer player) {
 		if (player == null) {
 			return null;
 		}
 
-		UUID uuid = getTeamUUID(player);
-		if (uuid == null) {
-			return null;
-		}
+		return getTeamByPlayerId(player.getUniqueId());
+	}
 
-		return getTeam(uuid);
+	/**
+	 * Used to find the team that a specified player UUID is in.
+	 *
+	 * @param playerId the player UUID to search for
+	 * @return the team they are in [null - they are not in a team]
+	 */
+	@Nullable
+	@Contract(pure = true, value = "null -> null")
+	public Team getTeamByPlayerId(@Nullable UUID playerId) {
+		return getTeamByTeamId(getTeamIdByPlayerId(playerId));
+	}
+
+	/**
+	 * Used to find the team that a specified player name is in.
+	 *
+	 * @param playerName the player name to search for
+	 * @return the team they are in [null - they are not in a team]
+	 */
+	@Nullable
+	@Contract(pure = true, value = "null -> null")
+	public Team getTeamByPlayerName(@Nullable String playerName) {
+		return getTeamByPlayerId(PlayerIdentityCache.getUuid(playerName));
 	}
 
 	/**
@@ -149,18 +162,19 @@ public abstract class TeamManager {
 	 * be found]
 	 */
 	@Nullable
-	public Team getTeamByName(@NotNull String name) {
-		if (!isTeam(name)) {
+	@Contract(pure = true, value = "null -> null")
+	public Team getTeamByTeamName(@Nullable String name) {
+		if (!isTeamName(name)) {
 			return null;
 		}
 
-		UUID uuid = getTeamUUID(name);
+		UUID uuid = getTeamIdByTeamName(name);
 
 		if (uuid == null) {
 			return null;
 		}
 
-		return getTeam(uuid);
+		return getTeamByTeamId(uuid);
 	}
 
 	/**
@@ -178,7 +192,7 @@ public abstract class TeamManager {
 
 		UUID id = UUID.randomUUID();
 		// ensuring the ID is unique
-		while (getTeam(id) != null) {
+		while (getTeamByTeamId(id) != null) {
 			id = UUID.randomUUID();
 		}
 		Team team = new Team(name, id, owner);
@@ -216,11 +230,11 @@ public abstract class TeamManager {
 			return null;
 		}
 
-		if (!isTeam(claimingTeam)) {
+		if (!isTeamId(claimingTeam)) {
 			return null;
 		}
 
-		return getTeam(claimingTeam);
+		return getTeamByTeamId(claimingTeam);
 	}
 
 	/**
@@ -326,7 +340,7 @@ public abstract class TeamManager {
 	 */
 	@SuppressWarnings("BooleanMethodIsAlwaysInverted")
 	@Contract(pure = true, value = "null -> false")
-	public abstract boolean isTeam(@Nullable UUID uuid);
+	public abstract boolean isTeamId(@Nullable UUID uuid);
 
 	/**
 	 * Used to check if a team exists with that name
@@ -335,7 +349,7 @@ public abstract class TeamManager {
 	 * @return If a team exists with that name
 	 */
 	@Contract(pure = true, value = "null -> false")
-	public abstract boolean isTeam(@Nullable String name);
+	public abstract boolean isTeamName(@Nullable String name);
 
 	/**
 	 * Used to check if the specified player is in a team
@@ -343,8 +357,18 @@ public abstract class TeamManager {
 	 * @param player The player to check
 	 * @return If they are in a team
 	 */
-	public boolean isInTeam(OfflinePlayer player) {
-		return player != null && playerTeamIndex.containsKey(player.getUniqueId());
+	public boolean isPlayerInTeam(@Nullable OfflinePlayer player) {
+		return player != null && isPlayerIdInTeam(player.getUniqueId());
+	}
+
+	/**
+	 * Used to check if the specified player UUID is in a team
+	 *
+	 * @param playerId The player UUID to check
+	 * @return If they are in a team
+	 */
+	public boolean isPlayerIdInTeam(@Nullable UUID playerId) {
+		return playerId != null && playerTeamIndex.containsKey(playerId);
 	}
 
 	/**
@@ -353,8 +377,18 @@ public abstract class TeamManager {
 	 * @param player the plyaer to check for
 	 * @return The team uuid
 	 */
-	public UUID getTeamUUID(OfflinePlayer player) {
-		return player == null ? null : playerTeamIndex.get(player.getUniqueId());
+	public UUID getTeamIdByPlayer(@Nullable OfflinePlayer player) {
+		return player == null ? null : getTeamIdByPlayerId(player.getUniqueId());
+	}
+
+	/**
+	 * Used to get the uuid of the team that the specified player UUID is in
+	 *
+	 * @param playerId the player UUID to check for
+	 * @return The team uuid
+	 */
+	public UUID getTeamIdByPlayerId(@Nullable UUID playerId) {
+		return playerId == null ? null : playerTeamIndex.get(playerId);
 	}
 
 	protected void indexPlayer(Team team, TeamPlayer player) {
@@ -380,7 +414,90 @@ public abstract class TeamManager {
 	 * @param name The name of the team
 	 * @return The UUID of the specified team
 	 */
-	public abstract UUID getTeamUUID(String name);
+	public abstract UUID getTeamIdByTeamName(String name);
+
+	/**
+	 * @deprecated Use {@link #getTeamByTeamId(UUID)} instead.
+	 */
+	@Deprecated
+	@Nullable
+	@Contract(pure = true, value = "null -> null")
+	public Team getTeam(@Nullable UUID uuid) {
+		return getTeamByTeamId(uuid);
+	}
+
+	/**
+	 * @deprecated Use {@link #getTeamByTeamOrPlayerName(String)} when both values
+	 * are accepted, or {@link #getTeamByTeamName(String)} /
+	 * {@link #getTeamByPlayerName(String)} for explicit lookup.
+	 */
+	@Deprecated
+	@Nullable
+	@Contract(pure = true, value = "null -> null")
+	public Team getTeam(@Nullable String name) {
+		return getTeamByTeamOrPlayerName(name);
+	}
+
+	/**
+	 * @deprecated Use {@link #getTeamByPlayer(OfflinePlayer)} instead.
+	 */
+	@Deprecated
+	@Nullable
+	@Contract(pure = true, value = "null -> null")
+	public Team getTeam(@Nullable OfflinePlayer player) {
+		return getTeamByPlayer(player);
+	}
+
+	/**
+	 * @deprecated Use {@link #getTeamByTeamName(String)} instead.
+	 */
+	@Deprecated
+	@Nullable
+	public Team getTeamByName(@NotNull String name) {
+		return getTeamByTeamName(name);
+	}
+
+	/**
+	 * @deprecated Use {@link #isTeamId(UUID)} instead.
+	 */
+	@Deprecated
+	@Contract(pure = true, value = "null -> false")
+	public boolean isTeam(@Nullable UUID uuid) {
+		return isTeamId(uuid);
+	}
+
+	/**
+	 * @deprecated Use {@link #isTeamName(String)} instead.
+	 */
+	@Deprecated
+	@Contract(pure = true, value = "null -> false")
+	public boolean isTeam(@Nullable String name) {
+		return isTeamName(name);
+	}
+
+	/**
+	 * @deprecated Use {@link #isPlayerInTeam(OfflinePlayer)} instead.
+	 */
+	@Deprecated
+	public boolean isInTeam(OfflinePlayer player) {
+		return isPlayerInTeam(player);
+	}
+
+	/**
+	 * @deprecated Use {@link #getTeamIdByPlayer(OfflinePlayer)} instead.
+	 */
+	@Deprecated
+	public UUID getTeamUUID(OfflinePlayer player) {
+		return getTeamIdByPlayer(player);
+	}
+
+	/**
+	 * @deprecated Use {@link #getTeamIdByTeamName(String)} instead.
+	 */
+	@Deprecated
+	public UUID getTeamUUID(String name) {
+		return getTeamIdByTeamName(name);
+	}
 
 	/**
 	 * Used to load the stored values into the storage manager

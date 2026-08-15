@@ -3,9 +3,7 @@ package com.booksaw.betterTeams.commands.presets;
 import com.booksaw.betterTeams.CommandResponse;
 import com.booksaw.betterTeams.Team;
 import com.booksaw.betterTeams.commands.SubCommand;
-import org.bukkit.Bukkit;
 import org.bukkit.command.CommandSender;
-import org.bukkit.entity.Player;
 
 import javax.annotation.Nullable;
 
@@ -55,14 +53,6 @@ public abstract class TeamSelectSubCommand extends SubCommand {
 			return null;
 		}
 
-		Team team = Team.getTeam(identifier);
-
-		if (team == null) {
-			Player player = Bukkit.getPlayer(identifier);
-			if (player != null) {
-				team = Team.getTeam(player);
-			}
-		}
-		return team;
+		return Team.getTeamByTeamOrPlayerName(identifier);
 	}
 }

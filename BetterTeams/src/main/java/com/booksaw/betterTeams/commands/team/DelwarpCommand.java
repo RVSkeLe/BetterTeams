@@ -60,7 +60,7 @@ public class DelwarpCommand extends TeamSubCommand {
 	public void onTabComplete(List<String> options, CommandSender sender, String label, String[] args) {
 		if (args.length == 1) {
 			if (sender instanceof Player) {
-				Team team = Team.getTeam((Player) sender);
+				Team team = Team.getTeamByPlayer((Player) sender);
 
 				if (team == null) {
 					options.add("<name>");

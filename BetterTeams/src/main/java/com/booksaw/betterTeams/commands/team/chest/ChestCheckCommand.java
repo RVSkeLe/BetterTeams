@@ -35,7 +35,7 @@ public class ChestCheckCommand extends SubCommand {
 			return new CommandResponse(true, "chest.check.notClaimed");
 		}
 
-		if (claimedBy == Team.getTeam(player)) {
+		if (claimedBy == Team.getTeamByPlayer(player)) {
 			return new CommandResponse(true, "chest.check.self");
 		}
 		return new CommandResponse(true, new ReferencedFormatMessage("chest.check.claimed", claimedBy.getName()));

@@ -35,7 +35,7 @@ public class NameCommand extends TeamSubCommand {
 			return response;
 		}
 
-		if (Team.getTeamManager().isTeam(args[0])) {
+		if (Team.getTeamManager().isTeamName(args[0])) {
 			return new CommandResponse("name.exists");
 		}
 

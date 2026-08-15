@@ -34,7 +34,7 @@ public class UltimateClaimsManager implements Listener {
 	@EventHandler(ignoreCancelled = true)
 	public void create(ClaimCreateEvent e) {
 		OfflinePlayer p = e.getClaim().getOwner().getPlayer();
-		Team team = Team.getTeam(p);
+		Team team = Team.getTeamByPlayer(p);
 
 		if (team == null) {
 			if (p.isOnline()) {
@@ -99,8 +99,8 @@ public class UltimateClaimsManager implements Listener {
 
 	@EventHandler(ignoreCancelled = true)
 	public void kickEvent(ClaimPlayerKickEvent e) {
-		Team team = Team.getTeam(e.getClaim().getOwner().getPlayer());
-		Team team2 = Team.getTeam(e.getPlayer());
+		Team team = Team.getTeamByPlayer(e.getClaim().getOwner().getPlayer());
+		Team team2 = Team.getTeamByPlayer(e.getPlayer());
 		if (team == team2) {
 			e.setCancelled(true);
 			if (e.getClaim().getOwner().getPlayer().isOnline()) {
@@ -111,8 +111,8 @@ public class UltimateClaimsManager implements Listener {
 
 	@EventHandler(ignoreCancelled = true)
 	public void banEvent(ClaimPlayerBanEvent e) {
-		Team team = Team.getTeam(e.getClaim().getOwner().getPlayer());
-		Team team2 = Team.getTeam(e.getBannedPlayer());
+		Team team = Team.getTeamByPlayer(e.getClaim().getOwner().getPlayer());
+		Team team2 = Team.getTeamByPlayer(e.getBannedPlayer());
 		if (team == team2) {
 			e.setCancelled(true);
 			if (e.getClaim().getOwner().getPlayer().isOnline()) {
@@ -123,8 +123,8 @@ public class UltimateClaimsManager implements Listener {
 
 	@EventHandler
 	public void leaveEvent(ClaimMemberLeaveEvent e) {
-		Team team = Team.getTeam(e.getClaim().getOwner().getPlayer());
-		Team team2 = Team.getTeam(e.getPlayer());
+		Team team = Team.getTeamByPlayer(e.getClaim().getOwner().getPlayer());
+		Team team2 = Team.getTeamByPlayer(e.getPlayer());
 		if (team == team2) {
 			e.setCancelled(true);
 			if (e.getPlayer().isOnline()) {
@@ -135,7 +135,7 @@ public class UltimateClaimsManager implements Listener {
 
 	@EventHandler(ignoreCancelled = true)
 	public void transferEvent(ClaimTransferOwnershipEvent e) {
-		Team team = Team.getTeam(e.getNewOwner());
+		Team team = Team.getTeamByPlayer(e.getNewOwner());
 		if (team == null || Objects.requireNonNull(team.getTeamPlayer(e.getNewOwner())).getRank() != PlayerRank.OWNER) {
 			Main.plugin.getLogger().info("");
 			Main.plugin.getLogger().info("");

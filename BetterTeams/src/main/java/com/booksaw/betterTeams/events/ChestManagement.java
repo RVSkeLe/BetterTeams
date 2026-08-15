@@ -85,7 +85,7 @@ public class ChestManagement implements Listener {
 				|| e.getPlayer().hasPermission("betterteams.chest.bypass")) {
 			return;
 		}
-		Team team = Team.getTeam(e.getPlayer());
+		Team team = Team.getTeamByPlayer(e.getPlayer());
 
 		Team claimedBy = Team.getClaimingTeam(e.getClickedBlock());
 		if (claimedBy != null && team != claimedBy && (team == null || !claimedBy.isAlly(team))) {

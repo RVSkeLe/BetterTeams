@@ -69,7 +69,7 @@ public class TeleportTeama extends SubCommand {
 					return new CommandResponse(new HelpMessage(this, label, parentCommand));
 				}
 				if (targetList.size() == 1) {
-					Team team = Team.getTeam(targetList.get(0));
+					Team team = Team.getTeamByPlayer(targetList.get(0));
 					if (team == null) {
 						return new CommandResponse("admin.inTeam");
 					}
@@ -79,7 +79,7 @@ public class TeleportTeama extends SubCommand {
 				}
 				teleportedHome = true;
 				teleportTargets(targetList, targetList.stream().map(player -> {
-					Team team = Team.getTeam(player);
+					Team team = Team.getTeamByPlayer(player);
 					if (team != null) {
 						if (team.getTeamHome() != null) {
 							return team.getTeamHome();
@@ -175,7 +175,7 @@ public class TeleportTeama extends SubCommand {
 			}
 			List<Player> targetList = new ArrayList<>();
 			if (args[0].equalsIgnoreCase("team")) {
-				Team specifiedTarget = Team.getTeam(args[1]);
+				Team specifiedTarget = Team.getTeamByTeamName(args[1]);
 				if (specifiedTarget == null) {
 					return targetList;
 				}

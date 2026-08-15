@@ -100,7 +100,7 @@ public class ScoreManagement implements Listener {
 	public void onKill(PlayerDeathEvent e) {
 		Player killed = e.getEntity().getPlayer();
 		// score decreases
-		Team killedTeam = Team.getTeam(killed);
+		Team killedTeam = Team.getTeamByPlayer(killed);
 		if (killedTeam != null) {
 			death(killed, killedTeam);
 		}
@@ -110,7 +110,7 @@ public class ScoreManagement implements Listener {
 		}
 
 		Player killer = e.getEntity().getKiller().getPlayer();
-		Team killerTeam = Team.getTeam(killer);
+		Team killerTeam = Team.getTeamByPlayer(killer);
 		if (killerTeam == null) {
 			return;
 		}

@@ -82,7 +82,7 @@ public class WarpCommand extends TeamSubCommand {
 		if (args.length == 1) {
 
 			if (sender instanceof Player) {
-				Team team = Team.getTeam((Player) sender);
+				Team team = Team.getTeamByPlayer((Player) sender);
 
 				if (team == null) {
 					options.add("<name>");

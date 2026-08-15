@@ -56,7 +56,7 @@ public class MetaRemoveTeama extends TeamSelectSubCommand {
 		if (args.length == 1) {
 			addTeamStringList(options, args[0]);
 		} else if (args.length == 2) {
-			addMetaStringList(options, Team.getTeam(args[0]), args[1]);
+			addMetaStringList(options, Team.getTeamByTeamName(args[0]), args[1]);
 		}
 	}
 }

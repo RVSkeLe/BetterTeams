@@ -20,12 +20,12 @@ public class JoinTeama extends SubCommand {
 			return new CommandResponse("noPlayer");
 		}
 
-		Team test = Team.getTeam(p);
+		Team test = Team.getTeamByPlayer(p);
 		if (test != null) {
 			return new CommandResponse("admin.notInTeam");
 		}
 
-		Team team = Team.getTeam(args[0]);
+		Team team = Team.getTeamByTeamName(args[0]);
 		if (team == null) {
 			return new CommandResponse("notTeam");
 		}

@@ -19,9 +19,9 @@ public class RankCommand extends SubCommand {
 		Team team = null;
 
 		if (args.length == 0 && sender instanceof Player) {
-			team = Team.getTeam((Player) sender);
+			team = Team.getTeamByPlayer((Player) sender);
 		} else if (args.length >= 1) {
-			team = Team.getTeam(args[0]);
+			team = Team.getTeamByTeamName(args[0]);
 		}
 
 		if (team == null) {

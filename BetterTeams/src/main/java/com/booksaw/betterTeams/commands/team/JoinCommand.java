@@ -15,7 +15,7 @@ public class JoinCommand extends NoTeamSubCommand {
 	@Override
 	public CommandResponse onCommand(Player p, String label, String[] args) {
 
-		Team team = Team.getTeam(args[0]);
+		Team team = Team.getTeamByTeamName(args[0]);
 		if (team == null) {
 			return new CommandResponse("notTeam");
 		}

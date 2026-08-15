@@ -14,7 +14,7 @@ public abstract class MoneySubCommand extends SubCommand {
 
 		Team team;
 		try {
-			team = Team.getTeam(args[0]);
+			team = Team.getTeamByTeamName(args[0]);
 		} catch (NullPointerException e) {
 			return new CommandResponse("noTeam");
 		}

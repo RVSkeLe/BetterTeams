@@ -26,7 +26,7 @@ public class BanCommand extends TeamSubCommand {
 			return new CommandResponse("noPlayer");
 		}
 
-		Team otherTeam = Team.getTeam(player);
+		Team otherTeam = Team.getTeamByPlayer(player);
 
 		if (team.isBanned(player)) {
 			return new CommandResponse("ban.already");

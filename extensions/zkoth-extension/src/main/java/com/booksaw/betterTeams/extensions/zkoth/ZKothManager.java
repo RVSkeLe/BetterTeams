@@ -17,7 +17,7 @@ public class ZKothManager implements Listener {
 	@SuppressWarnings("all")
 	@EventHandler
 	public void onWin(KothWinEvent e) {
-		Team team = Team.getTeam(e.getPlayer());
+		Team team = Team.getTeamByPlayer(e.getPlayer());
 		if (team == null) {
 			return;
 		}

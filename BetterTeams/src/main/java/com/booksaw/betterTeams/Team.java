@@ -87,22 +87,70 @@ public class Team {
 	}
 
 	@Contract(pure = true, value = "null -> null")
-	public static @Nullable Team getTeam(@Nullable UUID uuid) {
-		return TEAMMANAGER.getTeam(uuid);
+	public static @Nullable Team getTeamByTeamId(@Nullable UUID teamId) {
+		return TEAMMANAGER.getTeamByTeamId(teamId);
 	}
 
+	@Contract(pure = true, value = "null -> null")
+	public static @Nullable Team getTeamByTeamName(@Nullable String teamName) {
+		return TEAMMANAGER.getTeamByTeamName(teamName);
+	}
+
+	@Contract(pure = true, value = "null -> null")
+	public static @Nullable Team getTeamByPlayer(@Nullable OfflinePlayer player) {
+		return TEAMMANAGER.getTeamByPlayer(player);
+	}
+
+	@Contract(pure = true, value = "null -> null")
+	public static @Nullable Team getTeamByPlayerId(@Nullable UUID playerId) {
+		return TEAMMANAGER.getTeamByPlayerId(playerId);
+	}
+
+	@Contract(pure = true, value = "null -> null")
+	public static @Nullable Team getTeamByPlayerName(@Nullable String playerName) {
+		return TEAMMANAGER.getTeamByPlayerName(playerName);
+	}
+
+	@Contract(pure = true, value = "null -> null")
+	public static @Nullable Team getTeamByTeamOrPlayerName(@Nullable String identifier) {
+		return TEAMMANAGER.getTeamByTeamOrPlayerName(identifier);
+	}
+
+	/**
+	 * @deprecated Use {@link #getTeamByTeamId(UUID)} instead.
+	 */
+	@Deprecated
+	@Contract(pure = true, value = "null -> null")
+	public static @Nullable Team getTeam(@Nullable UUID uuid) {
+		return getTeamByTeamId(uuid);
+	}
+
+	/**
+	 * @deprecated Use {@link #getTeamByTeamOrPlayerName(String)} when both values
+	 * are accepted, or {@link #getTeamByTeamName(String)} /
+	 * {@link #getTeamByPlayerName(String)} for explicit lookup.
+	 */
+	@Deprecated
 	@Contract(pure = true, value = "null -> null")
 	public static @Nullable Team getTeam(@Nullable String name) {
-		return TEAMMANAGER.getTeam(name);
+		return getTeamByTeamOrPlayerName(name);
 	}
 
+	/**
+	 * @deprecated Use {@link #getTeamByPlayer(OfflinePlayer)} instead.
+	 */
+	@Deprecated
 	@Contract(pure = true, value = "null -> null")
 	public static @Nullable Team getTeam(@Nullable OfflinePlayer player) {
-		return TEAMMANAGER.getTeam(player);
+		return getTeamByPlayer(player);
 	}
 
-	public static Team getTeamByName(String name) {
-		return TEAMMANAGER.getTeamByName(name);
+	/**
+	 * @deprecated Use {@link #getTeamByTeamName(String)} instead.
+	 */
+	@Deprecated
+	public static @Nullable Team getTeamByName(String name) {
+		return getTeamByTeamName(name);
 	}
 
 	public static Team getClaimingTeam(Block block) {
@@ -647,7 +695,7 @@ public class Team {
 		final Set<TeamPlayer> membersClone = data.getMembersClone();
 
 		alliesClone.forEach(uuid -> {
-			Team team = Team.getTeam(uuid);
+			Team team = Team.getTeamByTeamId(uuid);
 			if (team != null) {
 				team.becomeNeutral(this, false);
 			}
@@ -1067,7 +1115,7 @@ public class Team {
 		}
 
 		RelationType prevRelation = RelationType.NEUTRAL;
-		final Team other = Team.getTeam(otherTeam);
+		final Team other = Team.getTeamByTeamId(otherTeam);
 		if (callUserEvent(other, prevRelation, RelationType.ALLY)) {
 			return;
 		}
@@ -1077,7 +1125,7 @@ public class Team {
 		saveAllies();
 
 		List<String> channelsToUse = Main.plugin.getConfig().getStringList("onAllyMessageChannel");
-		final String displayName = getTeam(otherTeam).getDisplayName();
+		final String displayName = getTeamByTeamId(otherTeam).getDisplayName();
 		if (channelsToUse.isEmpty() || channelsToUse.contains("CHAT")) {
 			Message message = new ReferencedFormatMessage("ally.ally", displayName);
 			data.broadcastMessage(message);
@@ -1128,7 +1176,7 @@ public class Team {
 			return;
 		}
 
-		final Team other = Team.getTeam(otherTeam);
+		final Team other = Team.getTeamByTeamId(otherTeam);
 
 		RelationType prevRelation = RelationType.ALLY;
 		if (callUserEvent(other, prevRelation, RelationType.NEUTRAL)) {
@@ -1375,7 +1423,7 @@ public class Team {
 	 * @return if this team can damage that player
 	 */
 	public boolean canDamage(Player player, Player source) {
-		Team team = Team.getTeam(player);
+		Team team = Team.getTeamByPlayer(player);
 		if (team == null) {
 			return true;
 		}
@@ -1425,7 +1473,7 @@ public class Team {
 	 * @return if this team can damage that player
 	 */
 	public boolean canDamage(Player player) {
-		Team team = Team.getTeam(player);
+		Team team = Team.getTeamByPlayer(player);
 		if (team == null) {
 			return true;
 		}

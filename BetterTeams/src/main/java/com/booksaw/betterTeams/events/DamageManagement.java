@@ -56,13 +56,13 @@ public class DamageManagement implements Listener {
 		if (!(e.getEntity() instanceof Player)) {
 			return;
 		}
-		Team temp = Team.getTeam((Player) e.getEntity());
+		Team temp = Team.getTeamByPlayer((Player) e.getEntity());
 		if (temp == null) {
 			return;
 		}
 		try {
 			if (e.getDamager() instanceof Player) {
-				if (!Objects.requireNonNull(Team.getTeam((Player) e.getDamager())).canDamage(temp,
+				if (!Objects.requireNonNull(Team.getTeamByPlayer((Player) e.getDamager())).canDamage(temp,
 						(Player) e.getDamager())) {
 					// they are on the same team
 					e.setCancelled(true);
@@ -71,7 +71,7 @@ public class DamageManagement implements Listener {
 				Projectile arrow = (Projectile) e.getDamager();
 				ProjectileSource source = arrow.getShooter();
 				if (source instanceof Player
-						&& !Objects.requireNonNull(Team.getTeam((Player) source)).canDamage(temp, (Player) source)) {
+						&& !Objects.requireNonNull(Team.getTeamByPlayer((Player) source)).canDamage(temp, (Player) source)) {
 					// they are on the same team
 					if (disableSelf && source == e.getEntity()) {
 						return;
@@ -82,7 +82,7 @@ public class DamageManagement implements Listener {
 				ThrownPotion arrow = (ThrownPotion) e.getDamager();
 				ProjectileSource source = arrow.getShooter();
 				if (source instanceof Player
-						&& !Objects.requireNonNull(Team.getTeam((Player) source)).canDamage(temp, (Player) source)) {
+						&& !Objects.requireNonNull(Team.getTeamByPlayer((Player) source)).canDamage(temp, (Player) source)) {
 					// they are on the same team
 					e.setCancelled(true);
 				}
@@ -90,7 +90,7 @@ public class DamageManagement implements Listener {
 				TNTPrimed explosive = (TNTPrimed) e.getDamager();
 				Entity source = explosive.getSource();
 				if (source instanceof Player
-						&& !Objects.requireNonNull(Team.getTeam((Player) source)).canDamage(temp, (Player) source)) {
+						&& !Objects.requireNonNull(Team.getTeamByPlayer((Player) source)).canDamage(temp, (Player) source)) {
 					// they are on the same team
 					if (disableSelf && source == e.getEntity()) {
 						return;
@@ -115,7 +115,7 @@ public class DamageManagement implements Listener {
 			return;
 		}
 		Player thrower = (Player) e.getEntity().getShooter();
-		Team team = Team.getTeam(thrower);
+		Team team = Team.getTeamByPlayer(thrower);
 		// thrower is not in team
 		if (team == null) {
 			return;
@@ -135,7 +135,7 @@ public class DamageManagement implements Listener {
 			for (LivingEntity entity : affectedEntities) {
 				try {
 					if (entity instanceof Player
-							&& !Objects.requireNonNull(Team.getTeam((Player) entity)).canDamage(team, thrower)) {
+							&& !Objects.requireNonNull(Team.getTeamByPlayer((Player) entity)).canDamage(team, thrower)) {
 						if (disableSelf && entity == thrower) {
 							continue;
 						}

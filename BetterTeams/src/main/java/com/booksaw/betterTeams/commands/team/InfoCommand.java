@@ -67,7 +67,7 @@ public class InfoCommand extends SubCommand {
 	private static String getTeamSetMessage(Set<UUID> teams, final String referenceMessage) {
 		StringBuilder tmp = new StringBuilder();
 		for (UUID uuid : teams) {
-			Team ally = Team.getTeam(uuid);
+			Team ally = Team.getTeamByTeamId(uuid);
 
 			if (ally == null) {
 				Main.plugin.getLogger().warning("Unable to locate team with UUID: " + uuid);
@@ -114,7 +114,7 @@ public class InfoCommand extends SubCommand {
 			if (!(sender instanceof Player)) {
 				return new CommandResponse(new HelpMessage(this, label, parentCommand));
 			}
-			Team team = Team.getTeam((Player) sender);
+			Team team = Team.getTeamByPlayer((Player) sender);
 			if (team == null) {
 				return new CommandResponse(new HelpMessage(this, label, parentCommand));
 			}
@@ -123,29 +123,11 @@ public class InfoCommand extends SubCommand {
 		}
 
 		// player or team has been entered
-		// trying by team name
-		Team team = Team.getTeam(args[0]);
+		Team team = Team.getTeamByTeamOrPlayerName(args[0]);
 
 		if (team != null) {
 			displayTeamInfo(sender, team);
 			return new CommandResponse(true);
-		}
-
-		// trying by player name
-		/*
-		 * method is depreciated as it does not guarantee the expected player, in most
-		 * use cases this will work and it will be down to the user if it does not due
-		 * to name changes This method is appropriate to use in this use case (so users
-		 * can view offline users teams by name not just by team name)
-		 */
-		OfflinePlayer player = Utils.getOfflinePlayer(args[0]);
-
-		if (player != null) {
-			team = Team.getTeam(player);
-			if (team != null) {
-				displayTeamInfo(sender, team);
-				return null;
-			}
 		}
 		return new CommandResponse("info.needTeam");
 

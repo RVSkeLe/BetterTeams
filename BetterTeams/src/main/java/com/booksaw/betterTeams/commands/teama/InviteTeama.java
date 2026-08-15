@@ -24,7 +24,7 @@ public class InviteTeama extends TeamSelectSubCommand {
 			return new CommandResponse("invite.banned");
 		}
 
-		if (Team.getTeam(toInvite) != null) {
+		if (Team.getTeamByPlayer(toInvite) != null) {
 			return new CommandResponse("invite.inTeam");
 		}
 

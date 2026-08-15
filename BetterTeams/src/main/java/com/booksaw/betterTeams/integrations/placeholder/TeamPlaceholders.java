@@ -90,12 +90,12 @@ public class TeamPlaceholders extends PlaceholderExpansion {
 		if (player == null) return null;
 
 		if ("inteam".equalsIgnoreCase(split[0])) {
-			return Team.getTeamManager().isInTeam(player)
+			return Team.getTeamManager().isPlayerInTeam(player)
 					? MessageManager.getMessage("placeholder.inteam")
 					: MessageManager.getMessage("placeholder.notinteam");
 		}
 
-		Team team = Team.getTeam(player);
+		Team team = Team.getTeamByPlayer(player);
 		if (team == null) return MessageManager.getMessage("placeholder.noTeam");
 
 		TeamPlayer tp = team.getTeamPlayer(player);
@@ -147,7 +147,7 @@ public class TeamPlaceholders extends PlaceholderExpansion {
 
 		Team team;
 		try {
-			team = Team.getTeam(teams[value - 1]);
+			team = Team.getTeamByTeamName(teams[value - 1]);
 		} catch (ArrayIndexOutOfBoundsException e) {
 			return MessageManager.getMessage("placeholder.noTeam");
 		}
@@ -165,7 +165,7 @@ public class TeamPlaceholders extends PlaceholderExpansion {
 			return null;
 		}
 
-		Team team = Team.getTeam(split[2]);
+		Team team = Team.getTeamByTeamName(split[2]);
 		if (team == null) {
 			return MessageManager.getMessage("placeholder.noTeam");
 		}
@@ -181,7 +181,7 @@ public class TeamPlaceholders extends PlaceholderExpansion {
 			return MessageManager.getMessage("placeholder.noTeam");
 		}
 
-		Team team = Team.getTeam(selectedPlayer);
+		Team team = Team.getTeamByPlayer(selectedPlayer);
 		if (team == null) {
 			return MessageManager.getMessage("placeholder.noTeam");
 		}
