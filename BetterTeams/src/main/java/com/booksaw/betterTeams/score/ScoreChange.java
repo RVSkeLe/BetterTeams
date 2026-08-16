@@ -5,13 +5,15 @@ import org.bukkit.entity.Player;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
+import java.util.UUID;
 
 public class ScoreChange {
 
 	public static final List<ScoreChange> spams = new ArrayList<>();
 	public final ChangeType type;
-	public final Player source;
-	public final Player target;
+	public final UUID source;
+	public final UUID target;
 	private long expires;
 
 	public ScoreChange(ChangeType type, Player source) {
@@ -20,8 +22,8 @@ public class ScoreChange {
 
 	public ScoreChange(ChangeType type, Player source, Player target) {
 		this.type = type;
-		this.source = source;
-		this.target = target;
+		this.source = getUniqueId(source);
+		this.target = getUniqueId(target);
 		update();
 		spams.add(this);
 	}
@@ -41,10 +43,14 @@ public class ScoreChange {
 	 */
 	public static boolean isSpam(ChangeType type, Player source, Player target) {
 
+		UUID sourceId = getUniqueId(source);
+		UUID targetId = getUniqueId(target);
 		ScoreChange change = null;
 
+		spams.removeIf(ScoreChange::hasExpired);
+
 		for (ScoreChange temp : spams) {
-			if (temp.type == type && temp.source == source && temp.target == target) {
+			if (temp.type == type && Objects.equals(temp.source, sourceId) && Objects.equals(temp.target, targetId)) {
 				change = temp;
 				break;
 			}
@@ -54,14 +60,13 @@ public class ScoreChange {
 			return false;
 		}
 
-		if (change.hasExpired()) {
-			spams.remove(change);
-			return false;
-		}
-
 		change.update();
 		return true;
 
+	}
+
+	private static UUID getUniqueId(Player player) {
+		return player == null ? null : player.getUniqueId();
 	}
 
 	public boolean hasExpired() {
