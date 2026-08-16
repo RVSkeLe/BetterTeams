@@ -25,7 +25,7 @@ public class TopCommand extends SubCommand {
 
 		MessageManager.sendMessage(sender, "loading");
 
-		Main.plugin.getFoliaLib().getScheduler().runAsync(task -> {
+		Main.plugin.getServer().getScheduler().runTaskAsynchronously(Main.plugin, () -> {
 
 			boolean contained = false;
 			String[] teams = Team.getTeamManager().sortTeamsByScore();

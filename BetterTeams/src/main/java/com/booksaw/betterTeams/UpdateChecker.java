@@ -7,6 +7,7 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.scheduler.BukkitRunnable;
 
 import javax.net.ssl.HttpsURLConnection;
 import java.io.BufferedReader;
@@ -34,7 +35,9 @@ public class UpdateChecker implements Listener {
 	}
 
 	public void checkForUpdate() {
-		Main.plugin.getFoliaLib().getScheduler().runTimerAsync(task -> {
+		new BukkitRunnable() {
+			@Override
+			public void run() {
 					try {
 						URI uri = new URI("https://api.spigotmc.org/legacy/update.php?resource=" + ID);
 						HttpsURLConnection connection = (HttpsURLConnection) uri.toURL().openConnection();
@@ -47,7 +50,7 @@ public class UpdateChecker implements Listener {
 						Bukkit.getServer().getConsoleSender().sendMessage(
 								ChatColor.translateAlternateColorCodes('&',
 										"&cUpdate checker failed! Disabling."));
-						task.cancel();
+						cancel();
 						return;
 					}
 
@@ -56,9 +59,9 @@ public class UpdateChecker implements Listener {
 
 					Main.plugin.getLogger().warning(MessageManager.getMessage("admin.update"));
 					latest = false;
-					task.cancel();
-				}, 1, 10 * 60 * 20L
-		);
+					cancel();
+			}
+		}.runTaskTimerAsynchronously(Main.plugin, 1, 10 * 60 * 20L);
 	}
 
 	private boolean isLatestVersion() {

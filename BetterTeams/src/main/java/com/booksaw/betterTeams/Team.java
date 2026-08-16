@@ -583,7 +583,7 @@ public class Team {
 			if (onlinePlayer.getOpenInventory().getTopInventory().getHolder()
 					instanceof TeamData.EchestInventoryHolder) {
 
-				Main.plugin.getFoliaLib().getScheduler().runLater(() -> onlinePlayer.closeInventory(), 1L);
+				Bukkit.getScheduler().runTaskLater(Main.plugin, () -> onlinePlayer.closeInventory(), 1L);
 			}
 		}
 
@@ -754,7 +754,7 @@ public class Team {
 			return;
 		}
 
-		Main.plugin.getFoliaLib().getScheduler().runLaterAsync(task -> {
+		Bukkit.getScheduler().runTaskLater(Main.plugin, () -> {
 			Player p = Bukkit.getPlayer(uniqueId);
 			if (p == null || getTeamPlayer(p) != null) {
 				return;

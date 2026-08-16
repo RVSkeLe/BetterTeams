@@ -50,7 +50,6 @@
 
         <!-- Paper API -->
         <paper.version>1.21.4-R0.1-SNAPSHOT</paper.version>
-        <folialib.version>0.5.2</folialib.version>
         <bstats.version>3.2.1</bstats.version>
         <adventure.version>4.26.1</adventure.version>
 
@@ -103,10 +102,6 @@
             <id>codemc-repo</id>
             <url>https://repo.codemc.io/repository/maven-public/</url>
         </repository>
-        <repository>
-            <id>tcoded-releases</id>
-            <url>https://repo.tcoded.com/releases</url>
-        </repository>
     </repositories>
 
     <dependencyManagement>
@@ -138,12 +133,6 @@
                 <artifactId>paper-api</artifactId>
                 <version>${paper.version}</version>
                 <scope>provided</scope>
-            </dependency>
-            <dependency>
-                <groupId>com.tcoded</groupId>
-                <artifactId>FoliaLib</artifactId>
-                <version>${folialib.version}</version>
-                <scope>compile</scope>
             </dependency>
             <dependency>
                 <groupId>org.bstats</groupId>

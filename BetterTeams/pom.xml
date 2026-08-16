@@ -33,10 +33,6 @@
             <artifactId>paper-api</artifactId>
         </dependency>
         <dependency>
-            <groupId>com.tcoded</groupId>
-            <artifactId>FoliaLib</artifactId>
-        </dependency>
-        <dependency>
             <groupId>org.bstats</groupId>
             <artifactId>bstats-bukkit</artifactId>
         </dependency>
@@ -128,10 +124,6 @@
                         <relocation>
                             <pattern>org.bstats</pattern>
                             <shadedPattern>booksawshaded.com.org.bstats</shadedPattern>
-                        </relocation>
-                        <relocation>
-                            <pattern>com.tcoded.folialib</pattern>
-                            <shadedPattern>com.booksaw.betterTeams.lib.folialib</shadedPattern>
                         </relocation>
                     </relocations>
                     <filters>

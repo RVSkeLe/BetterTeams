@@ -6,7 +6,6 @@ import com.booksaw.betterTeams.events.InventoryManagement;
 import org.bukkit.command.CommandSender;
 
 import java.util.List;
-import java.util.Objects;
 
 public class EchestCommand extends TeamSubCommand {
 
@@ -24,7 +23,7 @@ public class EchestCommand extends TeamSubCommand {
 					+ " this should never occur, report to booksaw");
 		}
 
-		Main.plugin.getFoliaLib().getScheduler().runAtEntity(player.getPlayer().getPlayer(), task -> Objects.requireNonNull(player.getPlayer().getPlayer()).openInventory(team.getEchest()));
+		player.getPlayer().getPlayer().openInventory(team.getEchest());
 
 		return new CommandResponse(true);
 	}
@@ -66,6 +65,11 @@ public class EchestCommand extends TeamSubCommand {
 	@Override
 	public PlayerRank getDefaultRank() {
 		return PlayerRank.DEFAULT;
+	}
+
+	@Override
+	public boolean runAsync(String[] args) {
+		return false;
 	}
 
 }

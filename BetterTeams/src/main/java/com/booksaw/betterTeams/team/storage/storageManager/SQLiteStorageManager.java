@@ -14,6 +14,7 @@ import com.booksaw.betterTeams.team.storage.team.SQLiteTeamStorage.StoredPlayer;
 import com.booksaw.betterTeams.team.storage.team.SQLiteTeamStorage.TeamSnapshot;
 import com.booksaw.betterTeams.team.storage.team.TeamStorage;
 import lombok.Getter;
+import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.Contract;
@@ -284,7 +285,7 @@ public class SQLiteStorageManager extends TeamManager {
 		saveIntervalSeconds = Math.max(1, Main.plugin.getConfig().getInt(
 				"database.saveIntervalSeconds", DEFAULT_SAVE_INTERVAL_SECONDS));
 		long intervalTicks = saveIntervalSeconds * 20L;
-		Main.plugin.getFoliaLib().getScheduler().runTimerAsync(() -> flushDirtyTeams(false), intervalTicks, intervalTicks);
+		Bukkit.getScheduler().runTaskTimerAsynchronously(Main.plugin, () -> flushDirtyTeams(false), intervalTicks, intervalTicks);
 	}
 
 	public void flushDirtyTeams(boolean force) {

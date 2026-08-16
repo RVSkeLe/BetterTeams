@@ -73,7 +73,7 @@ public class UltimateClaimsManager implements Listener {
 				continue;
 			}
 
-			Main.plugin.getFoliaLib().getScheduler().runLater(task -> {
+			Bukkit.getScheduler().runTaskLater(Main.plugin, () -> {
 				ClaimMember member = c.addMember(e.getPlayer(), ClaimRole.MEMBER);
 				JavaPlugin.getPlugin(UltimateClaims.class).getDataHelper().createMember(member);
 
@@ -158,11 +158,7 @@ public class UltimateClaimsManager implements Listener {
 				continue;
 			}
 
-			Main.plugin.getFoliaLib().getScheduler().runAsync(task -> {
-
-				c.destroy(ClaimDeleteReason.PLAYER);
-			});
-
+			c.destroy(ClaimDeleteReason.PLAYER);
 
 			if (player.getPlayer().isOnline()) {
 				MessageManager.sendMessage(player.getPlayer().getPlayer(), "uclaim.dissolve");

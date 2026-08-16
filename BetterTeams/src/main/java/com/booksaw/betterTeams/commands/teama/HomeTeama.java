@@ -1,10 +1,8 @@
 package com.booksaw.betterTeams.commands.teama;
 
 import com.booksaw.betterTeams.CommandResponse;
-import com.booksaw.betterTeams.Main;
 import com.booksaw.betterTeams.Team;
 import com.booksaw.betterTeams.commands.SubCommand;
-import org.bukkit.Bukkit;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 
@@ -25,7 +23,7 @@ public class HomeTeama extends SubCommand {
 		}
 
 		Player p = (Player) sender;
-		Main.plugin.getFoliaLib().getScheduler().teleportAsync(p, team.getTeamHome(), null);
+		p.teleport(team.getTeamHome());
 
 		return new CommandResponse(true, "admin.home.success");
 	}

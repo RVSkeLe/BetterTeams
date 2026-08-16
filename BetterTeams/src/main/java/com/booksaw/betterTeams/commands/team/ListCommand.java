@@ -27,7 +27,7 @@ public class ListCommand extends SubCommand {
 
 		MessageManager.sendMessage(sender, "loading");
 
-		Main.plugin.getFoliaLib().getScheduler().runAsync(task -> {
+		Main.plugin.getServer().getScheduler().runTaskAsynchronously(Main.plugin, () -> {
 			String[] teams = Team.getTeamManager().sortTeamsByMembers();
 
 			// displaying the page

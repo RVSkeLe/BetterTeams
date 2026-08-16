@@ -45,20 +45,20 @@ public class PlayerTeleport {
 
 		if (player.hasPermission("betterteams.warmup.bypass")) {
 			MessageManager.sendMessage(player, "teleport.bypass");
-			Main.plugin.getFoliaLib().getScheduler().runAsync(task -> runTp());
+			runTp();
 			return;
 		}
 
 		int wait = Main.plugin.getConfig().getInt("tpDelay");
 		if (wait <= 0) {
-			Main.plugin.getFoliaLib().getScheduler().runAsync(task -> runTp());
+			runTp();
 			return;
 		}
 
 		// sending the wait message
 		MessageManager.sendMessage(player, "teleport.wait", wait);
 
-		Main.plugin.getFoliaLib().getScheduler().runLater(task -> {
+		Main.plugin.getServer().getScheduler().runTaskLater(Main.plugin, () -> {
 			if (canTp()) {
 				try {
 					runTp();
@@ -78,13 +78,9 @@ public class PlayerTeleport {
 			return;
 		}
 
-		Main.plugin.getFoliaLib().getScheduler()
-				.teleportAsync(player, location, PlayerTeleportEvent.TeleportCause.PLUGIN)
-				.thenAccept(success -> {
-					if (success) {
-						MessageManager.sendMessage(player, reference);
-					}
-				});
+		if (player.teleport(location, PlayerTeleportEvent.TeleportCause.PLUGIN)) {
+			MessageManager.sendMessage(player, reference);
+		}
 	}
 
 	public boolean canTp() {
