@@ -294,7 +294,7 @@ public class SQLiteStorageManager extends TeamManager {
 		}
 
 		List<UUID> deletes = new ArrayList<>(deletedTeams);
-		deletedTeams.removeAll(deletes);
+		deletes.forEach(deletedTeams::remove);
 
 		List<TeamSnapshot> snapshots = new ArrayList<>();
 		List<SQLiteTeamStorage> snapshottedStorages = new ArrayList<>();
