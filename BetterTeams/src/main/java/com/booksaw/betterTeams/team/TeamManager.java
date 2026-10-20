@@ -607,6 +607,30 @@ public abstract class TeamManager {
 	 */
 	public abstract String[] sortTeamsByMembers();
 
+	public int getTeamPositionByScore(Team team) {
+		return getTeamPosition(sortTeamsByScore(), team);
+	}
+
+	public int getTeamPositionByBalance(Team team) {
+		return getTeamPosition(sortTeamsByBalance(), team);
+	}
+
+	public int getTeamPositionByMembers(Team team) {
+		return getTeamPosition(sortTeamsByMembers(), team);
+	}
+
+	private int getTeamPosition(String[] sortedTeams, Team team) {
+		if (team == null || sortedTeams == null) {
+			return 0;
+		}
+		for (int index = 0; index < sortedTeams.length; index++) {
+			if (java.util.Objects.equals(sortedTeams[index], team.getName())) {
+				return index + 1;
+			}
+		}
+		return 0;
+	}
+
 	/**
 	 * Used to reset the score of all teams
 	 */
@@ -632,6 +656,9 @@ public abstract class TeamManager {
 	public abstract void addChestClaim(Team team, Location loc);
 
 	public abstract void removeChestclaim(Location loc);
+
+	public void invalidateLeaderboards() {
+	}
 
 	/**
 	 * this can be overritten if any code needs to be run when onDisable is called

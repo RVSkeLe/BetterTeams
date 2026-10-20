@@ -55,7 +55,7 @@ public class TeamData {
 	private final List<UUID> invitedPlayers = new ArrayList<>();
 	private final TeamMeta meta = new TeamMeta();
 	private Inventory echest;
-	private String name;
+	private volatile String name;
 	private String description = "";
 	private boolean open;
 	private Location teamHome;
@@ -64,8 +64,8 @@ public class TeamData {
 	private ChatColor color;
 	private int rank = -1;
 	private int balRank;
-	private int score;
-	private double money;
+	private volatile int score;
+	private volatile double money;
 	private int level = 1;
 	private String tag = "";
 

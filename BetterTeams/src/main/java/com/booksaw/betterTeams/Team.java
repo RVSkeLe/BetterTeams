@@ -985,6 +985,7 @@ public class Team {
 	public void setScore(int score) {
 		data.setScore(score);
 		getStorage().set(StoredTeamValue.SCORE, data.getScore());
+		getTeamManager().invalidateLeaderboards();
 	}
 
 	public double getMoney() {
@@ -998,6 +999,7 @@ public class Team {
 	public void setMoney(double money) {
 		data.setMoney(money);
 		getStorage().set(StoredTeamValue.MONEY, data.getMoney());
+		getTeamManager().invalidateLeaderboards();
 	}
 
 	/**
