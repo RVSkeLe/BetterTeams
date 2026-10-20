@@ -72,26 +72,7 @@ public abstract class TeamManager {
 	@Nullable
 	@Contract(pure = true, value = "null -> null")
 	public Team getTeamByTeamId(@Nullable UUID teamId) {
-		if (teamId == null) {
-			return null;
-		}
-
-		if (loadedTeams.containsKey(teamId)) {
-			return loadedTeams.get(teamId);
-		}
-
-		if (!isTeamId(teamId)) {
-			return null;
-		}
-
-		try {
-			Team team = new Team(teamId);
-			loadedTeams.put(teamId, team);
-			indexTeamPlayers(team);
-			return team;
-		} catch (IllegalArgumentException e) {
-			return null;
-		}
+		return teamId == null ? null : loadedTeams.get(teamId);
 	}
 
 	/**
@@ -196,16 +177,20 @@ public abstract class TeamManager {
 			id = UUID.randomUUID();
 		}
 		Team team = new Team(name, id, owner);
-
-		CreateTeamEvent event = new CreateTeamEvent(team, owner);
-		Bukkit.getPluginManager().callEvent(event);
-
-		if (event.isCancelled()) {
-			throw new IllegalArgumentException("Creating team was cancelled by another plugin");
-		}
-
 		loadedTeams.put(id, team);
-		registerNewTeam(team, owner);
+		try {
+			registerNewTeam(team, owner);
+
+			CreateTeamEvent event = new CreateTeamEvent(team, owner);
+			Bukkit.getPluginManager().callEvent(event);
+
+			if (event.isCancelled()) {
+				throw new IllegalArgumentException("Creating team was cancelled by another plugin");
+			}
+		} catch (RuntimeException e) {
+			discardNewTeam(team);
+			throw e;
+		}
 
 		if (Main.plugin.teamManagement != null && owner != null) {
 			Main.plugin.teamManagement.displayBelowName(owner);
@@ -518,13 +503,18 @@ public abstract class TeamManager {
 	 */
 	protected abstract void registerNewTeam(Team team, Player player);
 
+	protected void discardNewTeam(Team team) {
+	}
+
 	/**
 	 * Used to disband a team
 	 *
 	 * @param team The team that is being disbanded
 	 */
 	public void disbandTeam(Team team) {
-		loadedTeams.remove(team.getID());
+		if (!loadedTeams.remove(team.getID(), team)) {
+			return;
+		}
 
 		// if a team is being disbanded due to invalid team loading, the file should not
 		// be deleted to preserve data
@@ -656,6 +646,10 @@ public abstract class TeamManager {
 	public abstract void addChestClaim(Team team, Location loc);
 
 	public abstract void removeChestclaim(Location loc);
+
+	public void removeChestclaim(Team team, Location loc) {
+		removeChestclaim(loc);
+	}
 
 	public void invalidateLeaderboards() {
 	}

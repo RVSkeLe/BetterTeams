@@ -217,19 +217,24 @@ public class SQLiteStorageManager extends TeamManager {
 			return;
 		}
 
-		Team team = null;
+		AtomicReference<Team> createdTeam = new AtomicReference<>();
 		try {
-			team = new Team(uuid);
-			indexTeam(team);
-			loadedTeams.put(uuid, team);
+			loadedTeams.computeIfAbsent(uuid, ignored -> {
+				Team team = new Team(uuid);
+				createdTeam.set(team);
+				indexTeam(team);
+				return team;
+			});
 		} catch (RuntimeException e) {
-			removeFailedTeamLoad(uuid, team);
+			removeFailedTeamLoad(uuid, createdTeam.get());
 			Main.plugin.getLogger().log(java.util.logging.Level.WARNING, "Skipping invalid team " + uuid, e);
 		}
 	}
 
 	private void removeFailedTeamLoad(UUID uuid, Team team) {
-		loadedTeams.remove(uuid);
+		if (team != null) {
+			loadedTeams.remove(uuid, team);
+		}
 		SQLiteTeamStorage storage = storageCache.remove(uuid);
 		memberCounts.remove(uuid);
 		if (team == null) {
@@ -261,9 +266,14 @@ public class SQLiteStorageManager extends TeamManager {
 	}
 
 	@Override
+	protected void discardNewTeam(Team team) {
+		deleteTeamStorage(team);
+	}
+
+	@Override
 	protected void deleteTeamStorage(Team team) {
 		deletedTeams.add(team.getID());
-		loadedTeams.remove(team.getID());
+		loadedTeams.remove(team.getID(), team);
 		SQLiteTeamStorage storage = storageCache.remove(team.getID());
 		if (team.getName() != null) {
 			teamNameIndex.remove(normalizeName(team.getName()), team.getID());
@@ -278,6 +288,9 @@ public class SQLiteStorageManager extends TeamManager {
 
 	@Override
 	public void teamNameChange(Team team, String newName) {
+		if (loadedTeams.get(team.getID()) != team) {
+			throw new IllegalStateException("Cannot rename a stale team instance: " + team.getID());
+		}
 		if (newName == null) {
 			throw new IllegalArgumentException("Team name cannot be null");
 		}
@@ -292,26 +305,32 @@ public class SQLiteStorageManager extends TeamManager {
 
 	@Override
 	public void playerJoinTeam(Team team, TeamPlayer player) {
+		SQLiteTeamStorage storage = getCachedStorage(team);
 		indexPlayer(team, player);
 		memberCounts.compute(team.getID(), (ignored, count) -> count == null
 				? team.getMembersClone().size() + 1
 				: count + 1);
-		getCachedStorage(team).updatePlayer(player);
+		storage.updatePlayer(player);
 		requestLeaderboardRefresh();
 	}
 
 	@Override
 	public void playerLeaveTeam(Team team, TeamPlayer player) {
+		SQLiteTeamStorage storage = getCachedStorage(team);
 		unindexPlayer(team, player);
 		memberCounts.compute(team.getID(), (ignored, count) -> count == null
 				? Math.max(0, team.getMembersClone().size() - 1)
 				: Math.max(0, count - 1));
-		getCachedStorage(team).removePlayer(player);
+		storage.removePlayer(player);
 		requestLeaderboardRefresh();
 	}
 
 	@Override
 	public TeamStorage createTeamStorage(Team team) {
+		Team loadedTeam = loadedTeams.get(team.getID());
+		if (loadedTeam != null && loadedTeam != team) {
+			throw new IllegalStateException("Cannot load a stale team instance: " + team.getID());
+		}
 		return storageCache.computeIfAbsent(team.getID(), ignored -> new SQLiteTeamStorage(this, team, false));
 	}
 
@@ -391,9 +410,10 @@ public class SQLiteStorageManager extends TeamManager {
 
 	@Override
 	public void addChestClaim(Team team, Location loc) {
+		SQLiteTeamStorage storage = getCachedStorage(team);
 		String location = TeamData.locationToString(loc);
 		claims.put(location, team.getID());
-		getCachedStorage(team).addClaim(location);
+		storage.addClaim(location);
 	}
 
 	@Override
@@ -410,11 +430,30 @@ public class SQLiteStorageManager extends TeamManager {
 		}
 	}
 
+	@Override
+	public void removeChestclaim(Team team, Location loc) {
+		if (loadedTeams.get(team.getID()) != team) {
+			throw new IllegalStateException("Cannot remove a claim from a stale team instance: " + team.getID());
+		}
+		String location = TeamData.locationToString(loc);
+		if (!team.getID().equals(claims.get(location))) {
+			return;
+		}
+		removeChestclaim(loc);
+	}
+
 	public int getTeamCount() {
 		return loadedTeams.size();
 	}
 
 	private SQLiteTeamStorage getCachedStorage(Team team) {
+		Team loadedTeam = loadedTeams.get(team.getID());
+		if (loadedTeam != null && loadedTeam != team) {
+			throw new IllegalStateException("Cannot access storage for a stale team instance: " + team.getID());
+		}
+		if (loadedTeam == null && !storageCache.containsKey(team.getID())) {
+			throw new IllegalStateException("Cannot access storage for an unloaded team instance: " + team.getID());
+		}
 		return storageCache.computeIfAbsent(team.getID(), ignored -> new SQLiteTeamStorage(this, team, false));
 	}
 

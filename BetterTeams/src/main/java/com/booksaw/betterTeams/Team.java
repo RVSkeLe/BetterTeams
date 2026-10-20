@@ -1563,13 +1563,13 @@ public class Team {
 	 */
 	public void removeClaim(Location location) {
 		data.removeClaim(location);
-		Team.getTeamManager().removeChestclaim(location);
+		Team.getTeamManager().removeChestclaim(this, location);
 		saveClaims();
 	}
 
 	public void clearClaims() {
 		for (Location location : data.getClaimsClone()) {
-			Team.getTeamManager().removeChestclaim(location);
+			Team.getTeamManager().removeChestclaim(this, location);
 		}
 		data.clearClaims();
 		saveClaims();
