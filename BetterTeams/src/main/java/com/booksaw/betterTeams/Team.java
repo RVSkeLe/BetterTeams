@@ -259,8 +259,7 @@ public class Team {
 
 		storage = TEAMMANAGER.createTeamStorage(this);
 		data.setMutationListener(this::markDirty);
-
-		data.load(storage);
+		storage.load(data);
 
 		if (data.getName() == null) {
 			// removing it from the team list, the java GC will handle the reset
@@ -304,10 +303,6 @@ public class Team {
 		if (owner != null) {
 			addMember(new TeamPlayer(owner, PlayerRank.OWNER));
 		}
-		storage.markDirty();
-		/*
-		 * The storage cache is flushed after the remaining team settings are applied.
-		 */
 	}
 
 	/**
@@ -329,7 +324,6 @@ public class Team {
 
 		TEAMMANAGER.teamNameChange(this, name);
 		data.setName(name);
-		markDirty();
 
 		registerTeamName();
 
@@ -471,7 +465,6 @@ public class Team {
 		tag = Optional.ofNullable(event.getNewTeamTag()).orElse("");
 
 		data.setTag(tag);
-		markDirty();
 
 		registerTeamName();
 
@@ -480,7 +473,6 @@ public class Team {
 
 	public void setOpen(boolean open) {
 		data.setOpen(open);
-		markDirty();
 	}
 
 	/**
@@ -490,7 +482,6 @@ public class Team {
 	 */
 	public void setDescription(String description) {
 		data.setDescription(description);
-		markDirty();
 	}
 
 	/**
@@ -510,7 +501,6 @@ public class Team {
 
 		final ChatColor oldColor = getColor();
 		data.setColor(color);
-		markDirty();
 
 		registerTeamName();
 
@@ -556,10 +546,8 @@ public class Team {
 		}
 		getTeamManager().playerLeaveTeam(this, p);
 		data.removeMember(p);
-		markDirty();
 		if (p.isAnchored()) {
 			data.unanchorPlayer(p);
-			markDirty();
 		}
 		Optional<Player> onlinePlayerOpt = p.getOnlinePlayer();
 		if (onlinePlayerOpt.isPresent()) {
@@ -609,9 +597,6 @@ public class Team {
 	 */
 	public AnchorResult anchorPlayer(TeamPlayer p) {
 		AnchorResult result = data.anchorPlayer(p);
-		if (result == AnchorResult.SUCCESS) {
-			markDirty();
-		}
 		return result;
 	}
 
@@ -623,9 +608,6 @@ public class Team {
 	 */
 	public AnchorResult unanchorPlayer(TeamPlayer p) {
 		AnchorResult result = data.unanchorPlayer(p);
-		if (result == AnchorResult.SUCCESS) {
-			markDirty();
-		}
 		return result;
 	}
 
@@ -755,7 +737,6 @@ public class Team {
 		} catch (CancelledEventException e) {
 			return false;
 		}
-		markDirty();
 		return true;
 
 	}
@@ -825,7 +806,6 @@ public class Team {
 		}
 
 		promotePlayer.setRank(event.getNewRank());
-		markDirty();
 
 		Bukkit.getPluginManager()
 				.callEvent(new PostPromotePlayerEvent(this, promotePlayer, oldRank, newRank));
@@ -856,7 +836,6 @@ public class Team {
 		}
 
 		demotePlayer.setRank(event.getNewRank());
-		markDirty();
 
 		Bukkit.getPluginManager()
 				.callEvent(new PostDemotePlayerEvent(this, demotePlayer, oldRank, newRank));
@@ -864,12 +843,10 @@ public class Team {
 
 	public void setTeamHome(Location teamHome) {
 		data.setTeamHome(teamHome);
-		markDirty();
 	}
 
 	public void deleteTeamHome() {
 		data.setTeamHome(null);
-		markDirty();
 		if (data.isUseTeamHomeAsAnchor()) {
 			setAnchored(false);
 		}
@@ -882,7 +859,6 @@ public class Team {
 	 */
 	public void banPlayer(OfflinePlayer player) {
 		data.addBan(player.getUniqueId());
-		markDirty();
 	}
 
 	/**
@@ -892,7 +868,6 @@ public class Team {
 	 */
 	public void unbanPlayer(OfflinePlayer player) {
 		data.removeBan(player.getUniqueId());
-		markDirty();
 	}
 
 	/**
@@ -959,7 +934,6 @@ public class Team {
 
 	public void setScore(int score) {
 		data.setScore(score);
-		markDirty();
 		getTeamManager().invalidateLeaderboards();
 	}
 
@@ -973,7 +947,6 @@ public class Team {
 
 	public void setMoney(double money) {
 		data.setMoney(money);
-		markDirty();
 		getTeamManager().invalidateLeaderboards();
 	}
 
@@ -1138,7 +1111,6 @@ public class Team {
 		}
 
 		data.addAlly(otherTeam);
-		markDirty();
 
 		List<String> channelsToUse = Main.plugin.getConfig().getStringList("onAllyMessageChannel");
 		final String displayName = getTeamByTeamId(otherTeam).getDisplayName();
@@ -1200,7 +1172,6 @@ public class Team {
 		}
 
 		data.removeAlly(otherTeam);
-		markDirty();
 
 		List<String> channelsToUse;
 		Message chatMessage, titleMessage;
@@ -1284,7 +1255,6 @@ public class Team {
 	 */
 	public void addAllyRequest(UUID team) {
 		data.addAllyRequest(team);
-		markDirty();
 	}
 
 	/**
@@ -1307,7 +1277,6 @@ public class Team {
 	 */
 	public void removeAllyRequest(UUID team) {
 		data.removeAllyRequest(team);
-		markDirty();
 	}
 
 	/**
@@ -1525,13 +1494,11 @@ public class Team {
 
 	public void addWarp(Warp warp) {
 		data.addWarp(warp);
-		markDirty();
 	}
 
 	public void delWarp(String name) {
 		Warp warp = getWarp(name);
 		data.removeWarp(warp);
-		markDirty();
 	}
 
 	/**
@@ -1553,7 +1520,6 @@ public class Team {
 	public void addClaim(Location location) {
 		data.addClaim(location);
 		Team.getTeamManager().addChestClaim(this, location);
-		markDirty();
 	}
 
 	/**
@@ -1564,7 +1530,6 @@ public class Team {
 	public void removeClaim(Location location) {
 		data.removeClaim(location);
 		Team.getTeamManager().removeChestclaim(this, location);
-		markDirty();
 	}
 
 	public void clearClaims() {
@@ -1572,7 +1537,6 @@ public class Team {
 			Team.getTeamManager().removeChestclaim(this, location);
 		}
 		data.clearClaims();
-		markDirty();
 	}
 
 	public int getClaimCount() {
@@ -1613,13 +1577,11 @@ public class Team {
 
 	public void setLevel(int level) {
 		data.setLevel(level);
-		markDirty();
 
 	}
 
 	public void setPvp(boolean pvp) {
 		data.setPvp(pvp);
-		markDirty();
 
 	}
 
@@ -1637,7 +1599,6 @@ public class Team {
 			return false;
 		}
 		data.setUseTeamHomeAsAnchor(anchor);
-		markDirty();
 		return true;
 	}
 
@@ -1704,12 +1665,10 @@ public class Team {
 
 	public void setAndSaveMeta(String key, String value) {
 		data.getMeta().set(key, value);
-		markDirty();
 	}
 
 	public void removeAndSaveMeta(String key) {
 		data.getMeta().remove(key);
-		markDirty();
 	}
 
 	public TeamLevel getLevelObject() {

@@ -38,8 +38,8 @@ public abstract class Formatter {
 
 		private final MiniMessage SAFE_MINIMESSAGE = MiniMessage.builder()
 				.tags(SAFE_FORMATTING)
-				.preProcessor(new LegacyTextPreProcessor())
-				.postProcessor(new LegacyTextPostProcessor())
+				.preProcessor(LegacyTextUtils::toAdventure)
+				.postProcessor(Component::compact)
 				.build();
 
 		@Override
@@ -56,8 +56,8 @@ public abstract class Formatter {
 
 		private final MiniMessage ABSOLUTE_MINIMESSAGE = MiniMessage.builder()
 				.tags(ALL_TAG_RESOLVERS)
-				.preProcessor(new LegacyTextPreProcessor())
-				.postProcessor(new LegacyTextPostProcessor())
+				.preProcessor(LegacyTextUtils::toAdventure)
+				.postProcessor(Component::compact)
 				.build();
 
 		@Override
@@ -80,8 +80,8 @@ public abstract class Formatter {
 						StandardTags.rainbow(),
 						StandardTags.reset(),
 						LegacyTextTags.RESET))
-				.preProcessor(new LegacyTextPreProcessor())
-				.postProcessor(new LegacyTextPostProcessor())
+				.preProcessor(LegacyTextUtils::toAdventure)
+				.postProcessor(Component::compact)
 				.build();
 
 		@Override

@@ -19,7 +19,7 @@ public class MessageService {
 	@Getter
 	private final MessageConfig messageConfig;
 
-	private final MessageSender messageSender;
+	private final PaperMessageSender messageSender;
 
 	@Getter
 	private Component prefixComponent;

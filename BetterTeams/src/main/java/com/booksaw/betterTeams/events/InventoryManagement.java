@@ -21,19 +21,16 @@ import java.util.UUID;
 
 public class InventoryManagement implements Listener {
 
-	private static final Map<UUID, ViewerSession> viewers = new HashMap<>();
-
-	private record ViewerSession(Team team, Inventory inventory) {
-	}
+	private static final Map<UUID, Team> viewers = new HashMap<>();
 
 	public static boolean isViewing(Player player) {
 		return viewers.containsKey(player.getUniqueId());
 	}
 
 	public static void open(Player player, Team team) {
-		ViewerSession previous = viewers.remove(player.getUniqueId());
+		Team previous = viewers.remove(player.getUniqueId());
 		if (previous != null) {
-			previous.team().markDirty();
+			previous.markDirty();
 		}
 
 		Inventory inventory = team.getEchest();
@@ -42,36 +39,36 @@ public class InventoryManagement implements Listener {
 		}
 
 		player.openInventory(inventory);
-		viewers.put(player.getUniqueId(), new ViewerSession(team, inventory));
+		viewers.put(player.getUniqueId(), team);
 	}
 
 	public static void closeAll() {
-		List<Map.Entry<UUID, ViewerSession>> sessions = new ArrayList<>(viewers.entrySet());
+		List<Map.Entry<UUID, Team>> sessions = new ArrayList<>(viewers.entrySet());
 		viewers.clear();
 
-		for (Map.Entry<UUID, ViewerSession> entry : sessions) {
+		for (Map.Entry<UUID, Team> entry : sessions) {
 			Player player = Bukkit.getPlayer(entry.getKey());
-			if (player != null && player.getOpenInventory().getTopInventory() == entry.getValue().inventory()) {
+			Team team = entry.getValue();
+			if (player != null && player.getOpenInventory().getTopInventory() == team.getEchest()) {
 				player.closeInventory();
 			}
 
-			ViewerSession session = entry.getValue();
-			session.team().markDirty();
+			team.markDirty();
 		}
 	}
 
 	public static void closeForTeam(Team team) {
-		List<Map.Entry<UUID, ViewerSession>> sessions = viewers.entrySet().stream()
-				.filter(entry -> entry.getValue().team() == team)
+		List<Map.Entry<UUID, Team>> sessions = viewers.entrySet().stream()
+				.filter(entry -> entry.getValue() == team)
 				.toList();
 
-		for (Map.Entry<UUID, ViewerSession> entry : sessions) {
-			if (!viewers.remove(entry.getKey(), entry.getValue())) {
+		for (Map.Entry<UUID, Team> entry : sessions) {
+			if (!viewers.remove(entry.getKey(), team)) {
 				continue;
 			}
 
 			Player player = Bukkit.getPlayer(entry.getKey());
-			if (player != null && player.getOpenInventory().getTopInventory() == entry.getValue().inventory()) {
+			if (player != null && player.getOpenInventory().getTopInventory() == team.getEchest()) {
 				player.closeInventory();
 			}
 		}
@@ -85,13 +82,13 @@ public class InventoryManagement implements Listener {
 		}
 
 		Player player = (Player) e.getPlayer();
-		ViewerSession session = viewers.get(player.getUniqueId());
-		if (session == null || session.inventory() != e.getInventory()) {
+		Team team = viewers.get(player.getUniqueId());
+		if (team == null || team.getEchest() != e.getInventory()) {
 			return;
 		}
 
-		viewers.remove(player.getUniqueId(), session);
-		session.team().markDirty();
+		viewers.remove(player.getUniqueId(), team);
+		team.markDirty();
 	}
 
 	@EventHandler
@@ -100,9 +97,9 @@ public class InventoryManagement implements Listener {
 			return;
 		}
 
-		ViewerSession session = viewers.get(e.getWhoClicked().getUniqueId());
-		if (session != null && e.getView().getTopInventory() == session.inventory()) {
-			session.team().markDirty();
+		Team team = viewers.get(e.getWhoClicked().getUniqueId());
+		if (team != null && e.getView().getTopInventory() == team.getEchest()) {
+			team.markDirty();
 		}
 	}
 
@@ -112,21 +109,21 @@ public class InventoryManagement implements Listener {
 			return;
 		}
 
-		ViewerSession session = viewers.get(e.getWhoClicked().getUniqueId());
-		if (session == null || e.getView().getTopInventory() != session.inventory()) {
+		Team team = viewers.get(e.getWhoClicked().getUniqueId());
+		if (team == null || e.getView().getTopInventory() != team.getEchest()) {
 			return;
 		}
 
-		if (e.getRawSlots().stream().anyMatch(slot -> slot < session.inventory().getSize())) {
-			session.team().markDirty();
+		if (e.getRawSlots().stream().anyMatch(slot -> slot < team.getEchest().getSize())) {
+			team.markDirty();
 		}
 	}
 
 	@EventHandler
 	public void onQuit(PlayerQuitEvent e) {
-		ViewerSession session = viewers.remove(e.getPlayer().getUniqueId());
-		if (session != null) {
-			session.team().markDirty();
+		Team team = viewers.remove(e.getPlayer().getUniqueId());
+		if (team != null) {
+			team.markDirty();
 		}
 
 	}

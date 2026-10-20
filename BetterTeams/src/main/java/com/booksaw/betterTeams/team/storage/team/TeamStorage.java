@@ -2,6 +2,7 @@ package com.booksaw.betterTeams.team.storage.team;
 
 import com.booksaw.betterTeams.Team;
 import com.booksaw.betterTeams.TeamPlayer;
+import com.booksaw.betterTeams.team.TeamData;
 import org.bukkit.inventory.Inventory;
 
 import java.util.List;
@@ -21,6 +22,15 @@ public abstract class TeamStorage {
 
 	protected TeamStorage(Team team) {
 		this.team = team;
+	}
+
+	/**
+	 * Loads this team's data. SQLite storage overrides this to load one immutable
+	 * database snapshot; the default keeps compatibility with older storage
+	 * implementations.
+	 */
+	public void load(TeamData data) {
+		data.load(this);
 	}
 
 	private void checkCorrectType(StoredTeamValue reference, TeamStorageType type) {

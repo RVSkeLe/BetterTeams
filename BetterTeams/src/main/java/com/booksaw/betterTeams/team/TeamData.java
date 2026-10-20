@@ -22,15 +22,42 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 public class TeamData {
+
+	public record StoredPlayer(UUID uuid, int rank, String title, boolean anchor) {
+	}
+
+	public record StoredData(String name, String description, boolean open, int score, double money, String home,
+	                         String color, byte[] echest, int level, String tag, boolean pvp, boolean anchor,
+	                         List<StoredPlayer> players, List<String> bans, List<String> allies,
+	                         List<String> allyRequests, List<String> warps, List<String> claims,
+	                         Map<String, String> meta) {
+		public StoredData {
+			echest = echest == null ? null : echest.clone();
+			players = List.copyOf(players);
+			bans = List.copyOf(bans);
+			allies = List.copyOf(allies);
+			allyRequests = List.copyOf(allyRequests);
+			warps = List.copyOf(warps);
+			claims = List.copyOf(claims);
+			meta = Collections.unmodifiableMap(new HashMap<>(meta));
+		}
+
+		@Override
+		public byte[] echest() {
+			return echest == null ? null : echest.clone();
+		}
+	}
 
 	public enum AnchorResult {
 		SUCCESS,
@@ -47,7 +74,7 @@ public class TeamData {
 	}
 
 	private final int minScore;
-	private final Set<TeamPlayer> members = ConcurrentHashMap.newKeySet();
+	private final Set<TeamPlayer> members = new HashSet<>();
 	private final Set<UUID> anchoredPlayers = new HashSet<>();
 	private final Set<UUID> allies = new HashSet<>();
 	private final Set<UUID> bannedPlayers = new HashSet<>();
@@ -59,7 +86,7 @@ public class TeamData {
 	private Runnable mutationListener = () -> {
 	};
 	private Inventory echest;
-	private volatile String name;
+	private String name;
 	private String description = "";
 	private boolean open;
 	private Location teamHome;
@@ -68,8 +95,8 @@ public class TeamData {
 	private ChatColor color;
 	private int rank = -1;
 	private int balRank;
-	private volatile int score;
-	private volatile double money;
+	private int score;
+	private double money;
 	private int level = 1;
 	private String tag = "";
 
@@ -134,6 +161,71 @@ public class TeamData {
 		tag = Optional.ofNullable(storage.getString(StoredTeamValue.TAG)).orElse("");
 	}
 
+	public void load(StoredData stored) {
+		ThreadGuard.requirePrimaryThread();
+		name = stored.name();
+		description = Optional.ofNullable(stored.description()).orElse("");
+		open = stored.open();
+		pvp = stored.pvp();
+		useTeamHomeAsAnchor = stored.anchor();
+		color = parseColor(stored.color());
+		score = Math.max(minScore, stored.score());
+		double storedMoney = stored.money();
+		if (!Double.isFinite(storedMoney) || storedMoney < 0) {
+			Main.plugin.getLogger().warning("Invalid balance stored for team; resetting it to zero");
+			storedMoney = 0;
+		}
+		money = storedMoney;
+		if (stored.echest() != null && stored.echest().length > 0) {
+			try {
+				com.booksaw.betterTeams.Utils.deserializeItemsIntoInventory(echest, stored.echest());
+			} catch (RuntimeException e) {
+				com.booksaw.betterTeams.Utils.deserializeIntoInventory(echest,
+						new String(stored.echest(), java.nio.charset.StandardCharsets.UTF_8));
+			}
+		}
+		members.clear();
+		for (StoredPlayer player : stored.players()) {
+			members.add(new TeamPlayer(Bukkit.getOfflinePlayer(player.uuid()), PlayerRank.getRank(player.rank()),
+					player.title(), player.anchor()));
+		}
+		anchoredPlayers.clear();
+		for (StoredPlayer player : stored.players()) {
+			if (player.anchor()) {
+				anchoredPlayers.add(player.uuid());
+			}
+		}
+		syncMemberAnchors();
+		for (TeamPlayer member : members) {
+			member.setMutationListener(mutationListener);
+		}
+		bannedPlayers.clear();
+		bannedPlayers.addAll(parseUuids(stored.bans()));
+		allies.clear();
+		allies.addAll(parseUuids(stored.allies()));
+		allyRequests.clear();
+		allyRequests.addAll(parseUuids(stored.allyRequests()));
+		warps.clear();
+		for (String warp : stored.warps()) {
+			warps.add(new Warp(warp.split(";")));
+		}
+		claims.clear();
+		for (String claim : stored.claims()) {
+			try {
+				claims.add(locationFromString(claim));
+			} catch (IllegalArgumentException e) {
+				Main.plugin.getLogger().severe("Invalid chest claim location stored for team: " + e.getMessage());
+			}
+		}
+		meta.load(stored.meta());
+		teamHome = null;
+		if (stored.home() != null && !stored.home().isEmpty()) {
+			teamHome = locationFromString(stored.home());
+		}
+		level = Math.max(1, stored.level());
+		tag = Optional.ofNullable(stored.tag()).orElse("");
+	}
+
 	public void initializeNew(String name) {
 		ThreadGuard.requirePrimaryThread();
 		this.name = name;
@@ -146,7 +238,7 @@ public class TeamData {
 		color = defaultColor();
 		level = 1;
 		tag = "";
-
+		changed();
 	}
 
 	@Deprecated

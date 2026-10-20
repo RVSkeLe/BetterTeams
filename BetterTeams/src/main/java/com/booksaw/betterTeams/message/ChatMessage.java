@@ -59,23 +59,4 @@ public class ChatMessage extends StaticComponentHolderMessage {
 		return new ChatMessage(team, teamPlayer, ComponentUtil.setPlaceholders(teamPreMessage, playerMessage, "{1}", "{2}"), ComponentUtil.setPlaceholders(spyPreMessage, playerMessage, "{2}"));
 	}
 
-	@Override
-	public void sendMessage(CommandSender recipient) {
-		MessageManager.sendFullMessage(recipient, message);
-	}
-
-	@Override
-	public void sendMessage(Collection<? extends CommandSender> recipients) {
-		MessageManager.sendFullMessage(recipients, message);
-	}
-
-	@Override
-	public void sendTitle(Player recipient) {
-		MessageManager.sendFullTitle(recipient, message);
-	}
-
-	@Override
-	public void sendTitle(Collection<Player> recipients) {
-		MessageManager.sendFullTitle(recipients, message);
-	}
 }

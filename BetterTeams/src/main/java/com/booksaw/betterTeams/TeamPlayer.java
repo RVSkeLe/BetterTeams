@@ -30,21 +30,21 @@ public class TeamPlayer {
 	 * The rank of the player within their team
 	 */
 	@Getter
-	private volatile PlayerRank rank;
+	private PlayerRank rank;
 
 	/**
 	 * This stores if the team is messaging to the team chat or the global chat
 	 */
-	private volatile boolean teamChat = false;
+	private boolean teamChat = false;
 
-	private volatile boolean allyChat = false;
+	private boolean allyChat = false;
 
 	/**
 	 * Do not use this method (only should be used in the class Team, instead use
 	 * Team.setTitle() as that will save the updated value)
 	 */
 	@Getter
-	private volatile String title;
+	private String title;
 
 	/*
 	 * Whether or not this player accepts having their respawn location changed by team home anchor
@@ -52,9 +52,9 @@ public class TeamPlayer {
 	 * of this player's team accordingly, otherwise the team will desync from this player around this vaule
 	 * See Team.setPlayerAnchor(anchor)
 	 */
-	private volatile boolean anchor = false;
+	private boolean anchor = false;
 
-	private volatile Runnable mutationListener = () -> {
+	private Runnable mutationListener = () -> {
 	};
 
 	/**

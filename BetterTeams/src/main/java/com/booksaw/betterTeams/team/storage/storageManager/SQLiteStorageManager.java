@@ -3,6 +3,8 @@ package com.booksaw.betterTeams.team.storage.storageManager;
 import com.booksaw.betterTeams.Main;
 import com.booksaw.betterTeams.Team;
 import com.booksaw.betterTeams.TeamPlayer;
+import com.booksaw.betterTeams.Utils;
+import com.booksaw.betterTeams.Warp;
 import com.booksaw.betterTeams.database.BetterTeamsDatabase;
 import com.booksaw.betterTeams.database.TableName;
 import com.booksaw.betterTeams.team.TeamData;
@@ -10,8 +12,6 @@ import com.booksaw.betterTeams.team.TeamManager;
 import com.booksaw.betterTeams.team.storage.migration.LegacyStorageMigrationException;
 import com.booksaw.betterTeams.team.storage.migration.LegacyStorageMigrator;
 import com.booksaw.betterTeams.team.storage.team.SQLiteTeamStorage;
-import com.booksaw.betterTeams.team.storage.team.SQLiteTeamStorage.StoredPlayer;
-import com.booksaw.betterTeams.team.storage.team.SQLiteTeamStorage.TeamSnapshot;
 import com.booksaw.betterTeams.team.storage.team.TeamStorage;
 import lombok.Getter;
 import org.bukkit.Bukkit;
@@ -28,6 +28,7 @@ import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -48,16 +49,15 @@ public class SQLiteStorageManager extends TeamManager {
 
 	private static final int DEFAULT_SAVE_INTERVAL_SECONDS = 300;
 	private static final int DEFAULT_LEADERBOARD_REFRESH_SECONDS = 60;
-	private static final int LEADERBOARD_RETRY_DELAY_SECONDS = 1;
 	private static final String HOLOPATH = "holos";
 
 	@Getter
 	private BetterTeamsDatabase database;
 
-	private final Map<UUID, SQLiteTeamStorage> storageCache = new ConcurrentHashMap<>();
 	private final Map<String, UUID> teamNameIndex = new ConcurrentHashMap<>();
 	private final Map<String, UUID> claims = new ConcurrentHashMap<>();
 	private final Map<UUID, Integer> memberCounts = new ConcurrentHashMap<>();
+	private final Set<UUID> dirtyTeams = ConcurrentHashMap.newKeySet();
 	private final Set<UUID> deletedTeams = ConcurrentHashMap.newKeySet();
 	private volatile Thread databaseThread;
 	private final ScheduledExecutorService databaseExecutor = Executors.newSingleThreadScheduledExecutor(runnable -> {
@@ -66,24 +66,14 @@ public class SQLiteStorageManager extends TeamManager {
 		databaseThread = thread;
 		return thread;
 	});
-	private final ScheduledExecutorService leaderboardExecutor = Executors.newSingleThreadScheduledExecutor(runnable -> {
-		Thread thread = new Thread(runnable, "BetterTeams-Leaderboards");
-		thread.setDaemon(true);
-		return thread;
-	});
 	private final AtomicBoolean flushRequestQueued = new AtomicBoolean();
-	private final AtomicBoolean leaderboardRefreshQueued = new AtomicBoolean();
-	private final AtomicBoolean leaderboardRefreshRequested = new AtomicBoolean();
-	private final AtomicReference<LeaderboardSnapshot> scoreLeaderboard =
-			new AtomicReference<>(LeaderboardSnapshot.empty());
-	private final AtomicReference<LeaderboardSnapshot> balanceLeaderboard =
-			new AtomicReference<>(LeaderboardSnapshot.empty());
-	private final AtomicReference<LeaderboardSnapshot> membersLeaderboard =
-			new AtomicReference<>(LeaderboardSnapshot.empty());
+	private LeaderboardSnapshot scoreLeaderboard = LeaderboardSnapshot.empty();
+	private LeaderboardSnapshot balanceLeaderboard = LeaderboardSnapshot.empty();
+	private LeaderboardSnapshot membersLeaderboard = LeaderboardSnapshot.empty();
 	private volatile boolean shuttingDown;
 	private final AtomicBoolean flushQueued = new AtomicBoolean();
 	private int saveIntervalSeconds;
-	private int leaderboardRefreshSeconds;
+	private int leaderboardTaskId = -1;
 
 	public SQLiteStorageManager() {
 		setupDatabaseConnection();
@@ -106,14 +96,8 @@ public class SQLiteStorageManager extends TeamManager {
 	@Override
 	public void disable() {
 		shuttingDown = true;
-		leaderboardExecutor.shutdown();
-		try {
-			if (!leaderboardExecutor.awaitTermination(5, TimeUnit.SECONDS)) {
-				leaderboardExecutor.shutdownNow();
-			}
-		} catch (InterruptedException e) {
-			Thread.currentThread().interrupt();
-			leaderboardExecutor.shutdownNow();
+		if (leaderboardTaskId != -1) {
+			Bukkit.getScheduler().cancelTask(leaderboardTaskId);
 		}
 
 		QueuedFlush finalFlush = null;
@@ -237,12 +221,91 @@ public class SQLiteStorageManager extends TeamManager {
 		}
 	}
 
+	public TeamData.StoredData loadTeamData(UUID teamId) {
+		return executeOnDatabaseThread(() -> {
+			String id = teamId.toString();
+			try (PreparedStatement statement = database.selectWhere("*", TableName.TEAM, "teamID = ?", id)) {
+				ResultSet result = statement.executeQuery();
+				if (!result.next()) {
+					return emptyStoredData();
+				}
+
+				List<TeamData.StoredPlayer> players = new ArrayList<>();
+				try (PreparedStatement playerStatement = database.selectWhere("*", TableName.PLAYERS,
+						"teamID = ?", id)) {
+					ResultSet playerResults = playerStatement.executeQuery();
+					while (playerResults.next()) {
+						UUID playerId = UUID.fromString(playerResults.getString("playerUUID"));
+						players.add(new TeamData.StoredPlayer(playerId, playerResults.getInt("playerRank"),
+								playerResults.getString("title"), playerResults.getBoolean("anchor")));
+					}
+				}
+
+				List<String> bans = loadStrings(TableName.BANS, "playerUUID", "teamID = ?", id);
+				List<String> allies = loadAllies(id);
+				List<String> allyRequests = loadStrings(TableName.ALLYREQUESTS, "requestingTeamID",
+						"receivingTeamID = ?", id);
+				List<String> warps = loadStrings(TableName.WARPS, "warpInfo", "teamID = ?", id);
+				List<String> claims = loadStrings(TableName.CHESTCLAIMS, "chestLoc", "teamID = ?", id);
+				Map<String, String> meta = loadMeta(id);
+
+				return new TeamData.StoredData(result.getString("name"), result.getString("description"),
+						result.getBoolean("open"), result.getInt("score"), result.getDouble("money"),
+						result.getString("home"), result.getString("color"), result.getBytes("echest"),
+						result.getInt("level"), result.getString("tag"), result.getBoolean("pvp"),
+						result.getBoolean("anchor"), players, bans, allies, allyRequests, warps, claims, meta);
+			} catch (SQLException | IllegalArgumentException e) {
+				throw new IllegalStateException("Could not load team " + teamId, e);
+			}
+		});
+	}
+
+	private TeamData.StoredData emptyStoredData() {
+		return new TeamData.StoredData(null, null, false, 0, 0, null, null, null, 1, null, false, false,
+				List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), Map.of());
+	}
+
+	private List<String> loadStrings(TableName table, String column, String condition, Object... values)
+			throws SQLException {
+		List<String> resultValues = new ArrayList<>();
+		try (PreparedStatement statement = database.selectWhere(column, table, condition, values)) {
+			ResultSet results = statement.executeQuery();
+			while (results.next()) {
+				resultValues.add(results.getString(column));
+			}
+		}
+		return resultValues;
+	}
+
+	private List<String> loadAllies(String teamId) throws SQLException {
+		List<String> allies = new ArrayList<>();
+		try (PreparedStatement statement = database.selectWhere("*", TableName.ALLIES,
+				"team1ID = ? OR team2ID = ?", teamId, teamId)) {
+			ResultSet results = statement.executeQuery();
+			while (results.next()) {
+				String team1 = results.getString("team1ID");
+				allies.add(team1.equals(teamId) ? results.getString("team2ID") : team1);
+			}
+		}
+		return allies;
+	}
+
+	private Map<String, String> loadMeta(String teamId) throws SQLException {
+		Map<String, String> meta = new LinkedHashMap<>();
+		try (PreparedStatement statement = database.selectWhere("*", TableName.TEAM_META,
+				"teamID = ?", teamId)) {
+			ResultSet results = statement.executeQuery();
+			while (results.next()) {
+				meta.put(results.getString("metaKey"), results.getString("metaValue"));
+			}
+		}
+		return meta;
+	}
+
 	private void removeFailedTeamLoad(UUID uuid, Team team) {
 		if (team != null) {
 			loadedTeams.remove(uuid, team);
 		}
-		SQLiteTeamStorage storage = storageCache.remove(uuid);
-		memberCounts.remove(uuid);
 		if (team == null) {
 			return;
 		}
@@ -251,9 +314,7 @@ public class SQLiteStorageManager extends TeamManager {
 		}
 		unindexTeamPlayers(team);
 		memberCounts.remove(team.getID());
-		if (storage != null) {
-			storage.getClaimedChests().forEach(location -> claims.remove(location, uuid));
-		}
+		team.getClaimsClone().forEach(location -> claims.remove(TeamData.locationToString(location), uuid));
 	}
 
 	public void unloadTeam(UUID uuid) {
@@ -280,15 +341,13 @@ public class SQLiteStorageManager extends TeamManager {
 	protected void deleteTeamStorage(Team team) {
 		deletedTeams.add(team.getID());
 		loadedTeams.remove(team.getID(), team);
-		SQLiteTeamStorage storage = storageCache.remove(team.getID());
 		if (team.getName() != null) {
 			teamNameIndex.remove(normalizeName(team.getName()), team.getID());
 		}
 		unindexTeamPlayers(team);
 		memberCounts.remove(team.getID());
-		if (storage != null) {
-			storage.getClaimedChests().forEach(location -> claims.remove(location, team.getID()));
-		}
+		team.getClaimsClone().forEach(location -> claims.remove(TeamData.locationToString(location), team.getID()));
+		dirtyTeams.remove(team.getID());
 		requestLeaderboardRefresh();
 	}
 
@@ -315,7 +374,6 @@ public class SQLiteStorageManager extends TeamManager {
 		memberCounts.compute(team.getID(), (ignored, count) -> count == null
 				? team.getMembersClone().size() + 1
 				: count + 1);
-		team.markDirty();
 		requestLeaderboardRefresh();
 	}
 
@@ -325,7 +383,6 @@ public class SQLiteStorageManager extends TeamManager {
 		memberCounts.compute(team.getID(), (ignored, count) -> count == null
 				? Math.max(0, team.getMembersClone().size() - 1)
 				: Math.max(0, count - 1));
-		team.markDirty();
 		requestLeaderboardRefresh();
 	}
 
@@ -335,45 +392,44 @@ public class SQLiteStorageManager extends TeamManager {
 		if (loadedTeam != null && loadedTeam != team) {
 			throw new IllegalStateException("Cannot load a stale team instance: " + team.getID());
 		}
-		return storageCache.computeIfAbsent(team.getID(), ignored -> new SQLiteTeamStorage(this, team, false));
+		return new SQLiteTeamStorage(this, team, false);
 	}
 
 	@Override
 	public TeamStorage createNewTeamStorage(Team team) {
 		SQLiteTeamStorage storage = new SQLiteTeamStorage(this, team, true);
-		storageCache.put(team.getID(), storage);
 		deletedTeams.remove(team.getID());
 		return storage;
 	}
 
 	@Override
 	public String[] sortTeamsByScore() {
-		return scoreLeaderboard.get().teamNamesCopy();
+		return scoreLeaderboard.teamNamesCopy();
 	}
 
 	@Override
 	public String[] sortTeamsByBalance() {
-		return balanceLeaderboard.get().teamNamesCopy();
+		return balanceLeaderboard.teamNamesCopy();
 	}
 
 	@Override
 	public String[] sortTeamsByMembers() {
-		return membersLeaderboard.get().teamNamesCopy();
+		return membersLeaderboard.teamNamesCopy();
 	}
 
 	@Override
 	public int getTeamPositionByScore(Team team) {
-		return scoreLeaderboard.get().positionOf(team);
+		return scoreLeaderboard.positionOf(team);
 	}
 
 	@Override
 	public int getTeamPositionByBalance(Team team) {
-		return balanceLeaderboard.get().positionOf(team);
+		return balanceLeaderboard.positionOf(team);
 	}
 
 	@Override
 	public int getTeamPositionByMembers(Team team) {
-		return membersLeaderboard.get().positionOf(team);
+		return membersLeaderboard.positionOf(team);
 	}
 
 	@Override
@@ -416,7 +472,6 @@ public class SQLiteStorageManager extends TeamManager {
 	public void addChestClaim(Team team, Location loc) {
 		String location = TeamData.locationToString(loc);
 		claims.put(location, team.getID());
-		team.markDirty();
 	}
 
 	@Override
@@ -427,10 +482,6 @@ public class SQLiteStorageManager extends TeamManager {
 			return;
 		}
 
-		Team team = loadedTeams.get(teamId);
-		if (team != null) {
-			team.markDirty();
-		}
 	}
 
 	@Override
@@ -449,15 +500,10 @@ public class SQLiteStorageManager extends TeamManager {
 		return loadedTeams.size();
 	}
 
-	private SQLiteTeamStorage getCachedStorage(Team team) {
-		Team loadedTeam = loadedTeams.get(team.getID());
-		if (loadedTeam != null && loadedTeam != team) {
-			throw new IllegalStateException("Cannot access storage for a stale team instance: " + team.getID());
+	public void markDirty(Team team) {
+		if (team != null && !deletedTeams.contains(team.getID())) {
+			dirtyTeams.add(team.getID());
 		}
-		if (loadedTeam == null && !storageCache.containsKey(team.getID())) {
-			throw new IllegalStateException("Cannot access storage for an unloaded team instance: " + team.getID());
-		}
-		return storageCache.computeIfAbsent(team.getID(), ignored -> new SQLiteTeamStorage(this, team, false));
 	}
 
 	private void indexTeam(Team team) {
@@ -480,7 +526,9 @@ public class SQLiteStorageManager extends TeamManager {
 		}
 		indexTeamPlayers(team);
 		memberCounts.put(team.getID(), team.getMembersClone().size());
-		getCachedStorage(team).getClaimedChests().forEach(location -> claims.put(location, team.getID()));
+		team.getClaimsClone().stream()
+				.map(TeamData::locationToString)
+				.forEach(location -> claims.put(location, team.getID()));
 		requestLeaderboardRefresh();
 	}
 
@@ -496,72 +544,32 @@ public class SQLiteStorageManager extends TeamManager {
 	}
 
 	private void startPeriodicLeaderboardRefresh() {
-		leaderboardRefreshSeconds = Math.max(1, Main.plugin.getConfig().getInt(
+		long intervalTicks = Math.max(1, Main.plugin.getConfig().getInt(
 				"leaderboard.refreshIntervalSeconds", DEFAULT_LEADERBOARD_REFRESH_SECONDS));
-		leaderboardExecutor.scheduleAtFixedRate(this::requestLeaderboardRefresh,
-				leaderboardRefreshSeconds, leaderboardRefreshSeconds, TimeUnit.SECONDS);
+		leaderboardTaskId = Bukkit.getScheduler().scheduleSyncRepeatingTask(Main.plugin,
+				this::requestLeaderboardRefresh, intervalTicks * 20L, intervalTicks * 20L);
 	}
 
 	private void refreshLeaderboardsAtStartup() {
-		try {
-			leaderboardExecutor.submit(this::rebuildLeaderboards).get();
-		} catch (InterruptedException e) {
-			Thread.currentThread().interrupt();
-			Main.plugin.getLogger().log(java.util.logging.Level.WARNING,
-					"Interrupted while building initial team leaderboards", e);
-		} catch (ExecutionException e) {
-			Main.plugin.getLogger().log(java.util.logging.Level.WARNING,
-					"Could not build initial team leaderboards", e.getCause());
-		}
+		rebuildLeaderboards();
 	}
 
 	private void requestLeaderboardRefresh() {
-		if (shuttingDown) {
-			return;
+		if (!Bukkit.isPrimaryThread()) {
+			throw new IllegalStateException("Leaderboards must be refreshed on the Paper thread");
 		}
-		leaderboardRefreshRequested.set(true);
-		if (!leaderboardRefreshQueued.compareAndSet(false, true)) {
-			return;
-		}
-
-		try {
-			leaderboardExecutor.execute(this::processLeaderboardRefresh);
-		} catch (RejectedExecutionException e) {
-			leaderboardRefreshQueued.set(false);
-		}
-	}
-
-	private void processLeaderboardRefresh() {
-		try {
-			leaderboardRefreshRequested.set(false);
+		if (!shuttingDown) {
 			rebuildLeaderboards();
-		} catch (RuntimeException e) {
-			Main.plugin.getLogger().log(java.util.logging.Level.WARNING,
-					"Could not rebuild team leaderboards", e);
-		} finally {
-			leaderboardRefreshQueued.set(false);
-			if (leaderboardRefreshRequested.get() && !shuttingDown) {
-				schedulePendingLeaderboardRefresh();
-			}
-		}
-	}
-
-	private void schedulePendingLeaderboardRefresh() {
-		try {
-			leaderboardExecutor.schedule(this::requestLeaderboardRefresh,
-					LEADERBOARD_RETRY_DELAY_SECONDS, TimeUnit.SECONDS);
-		} catch (RejectedExecutionException ignored) {
-			leaderboardRefreshQueued.set(false);
 		}
 	}
 
 	private void rebuildLeaderboards() {
-		rebuildLeaderboard(scoreLeaderboard, LeaderboardType.SCORE);
-		rebuildLeaderboard(balanceLeaderboard, LeaderboardType.BALANCE);
-		rebuildLeaderboard(membersLeaderboard, LeaderboardType.MEMBERS);
+		scoreLeaderboard = rebuildLeaderboard(LeaderboardType.SCORE);
+		balanceLeaderboard = rebuildLeaderboard(LeaderboardType.BALANCE);
+		membersLeaderboard = rebuildLeaderboard(LeaderboardType.MEMBERS);
 	}
 
-	private void rebuildLeaderboard(AtomicReference<LeaderboardSnapshot> target, LeaderboardType type) {
+	private LeaderboardSnapshot rebuildLeaderboard(LeaderboardType type) {
 		Map<UUID, LeaderboardEntry> entriesById = new HashMap<>(loadedTeams.size());
 		for (Team team : loadedTeams.values()) {
 			String name = team.getName();
@@ -576,7 +584,11 @@ public class SQLiteStorageManager extends TeamManager {
 			entriesById.put(team.getID(), new LeaderboardEntry(team.getID(), name, value));
 		}
 
-		LeaderboardSnapshot previous = target.get();
+		LeaderboardSnapshot previous = switch (type) {
+			case SCORE -> scoreLeaderboard;
+			case BALANCE -> balanceLeaderboard;
+			case MEMBERS -> membersLeaderboard;
+		};
 		List<LeaderboardEntry> entries = new ArrayList<>(entriesById.size());
 		Set<UUID> orderedIds = new HashSet<>();
 		for (UUID teamId : previous.teamIds()) {
@@ -606,7 +618,7 @@ public class SQLiteStorageManager extends TeamManager {
 			teamNames[index] = entry.name();
 			positions.put(entry.teamId(), index + 1);
 		}
-		target.set(new LeaderboardSnapshot(teamIds, teamNames, Map.copyOf(positions)));
+		return new LeaderboardSnapshot(teamIds, teamNames, Map.copyOf(positions));
 	}
 
 	private enum LeaderboardType {
@@ -715,18 +727,16 @@ public class SQLiteStorageManager extends TeamManager {
 		}
 
 		List<UUID> deletes = new ArrayList<>(deletedTeams);
-		List<SQLiteTeamStorage> snapshottedStorages = new ArrayList<>();
+		List<UUID> snapshottedTeams = new ArrayList<>();
 		List<TeamSnapshot> snapshots = new ArrayList<>();
 		try {
-			for (SQLiteTeamStorage storage : storageCache.values()) {
-				TeamSnapshot snapshot = storage.snapshot(force);
-				if (snapshot != null) {
-					snapshots.add(snapshot);
-					snapshottedStorages.add(storage);
+			for (Team team : loadedTeams.values()) {
+				if (force || dirtyTeams.contains(team.getID())) {
+					snapshots.add(snapshotTeam(team));
+					snapshottedTeams.add(team.getID());
 				}
 			}
 		} catch (RuntimeException e) {
-			snapshottedStorages.forEach(SQLiteTeamStorage::restoreDirty);
 			flushQueued.set(false);
 			throw e;
 		}
@@ -736,7 +746,8 @@ public class SQLiteStorageManager extends TeamManager {
 			return null;
 		}
 
-		FlushJob job = new FlushJob(deletes, snapshottedStorages, snapshots);
+		dirtyTeams.removeAll(snapshottedTeams);
+		FlushJob job = new FlushJob(deletes, snapshottedTeams, snapshots);
 		try {
 			flushQueued.set(true);
 			Future<?> future = databaseExecutor.submit(() -> executeFlush(job));
@@ -771,14 +782,14 @@ public class SQLiteStorageManager extends TeamManager {
 	private void completeFlush(FlushJob job) {
 		job.deletes().forEach(deletedTeams::remove);
 		flushQueued.set(false);
-		if (!shuttingDown && (!deletedTeams.isEmpty() || storageCache.values().stream().anyMatch(SQLiteTeamStorage::isDirty))) {
+		if (!shuttingDown && (!deletedTeams.isEmpty() || !dirtyTeams.isEmpty())) {
 			flushDirtyTeams(false);
 		}
 	}
 
 	private void restoreFlush(FlushJob job) {
 		deletedTeams.addAll(job.deletes());
-		job.snapshottedStorages().forEach(SQLiteTeamStorage::restoreDirty);
+		dirtyTeams.addAll(job.snapshottedTeams());
 		flushQueued.set(false);
 	}
 
@@ -807,11 +818,61 @@ public class SQLiteStorageManager extends TeamManager {
 		});
 	}
 
-	private record FlushJob(List<UUID> deletes, List<SQLiteTeamStorage> snapshottedStorages,
+	private record FlushJob(List<UUID> deletes, List<UUID> snapshottedTeams,
 	                        List<TeamSnapshot> snapshots) {
 	}
 
 	private record QueuedFlush(FlushJob job, Future<?> future) {
+	}
+
+	private TeamSnapshot snapshotTeam(Team team) {
+		if (!Bukkit.isPrimaryThread()) {
+			throw new IllegalStateException("Team snapshots must be created on the Paper thread");
+		}
+
+		List<StoredPlayer> players = team.getMembersClone().stream()
+				.map(player -> new StoredPlayer(player.getPlayerUUID(), player.getRank().value,
+						player.getTitle(), player.isAnchored()))
+				.toList();
+		List<String> bans = team.getBannedPlayersClone().stream().map(UUID::toString).toList();
+		List<String> allies = team.getAlliesClone().stream().map(UUID::toString).toList();
+		List<String> allyRequests = team.getAllyRequests().stream().map(UUID::toString).toList();
+		List<String> warps = team.getWarps().stream().map(Warp::toString).toList();
+		List<String> claims = team.getClaimsClone().stream()
+				.map(TeamData::locationToString)
+				.filter(location -> location != null)
+				.toList();
+
+		return new TeamSnapshot(team.getID().toString(), team.getName(), team.getDescription(), team.isOpen(),
+				team.getScore(), team.getMoney(), TeamData.locationToString(team.getTeamHome()),
+				String.valueOf(team.getColor().getChar()), Utils.serializeInventoryAsBytes(team.getEchest()),
+				team.getLevel(), team.getOriginalTag(), team.isPvp(), team.isUseTeamHomeAsAnchor(), players, bans,
+				allies, allyRequests, warps, claims, team.getMeta().getSerialized());
+	}
+
+	private record StoredPlayer(UUID uuid, int rank, String title, boolean anchor) {
+	}
+
+	private record TeamSnapshot(String teamId, String name, String description, boolean open, int score, double money,
+	                            String home, String color, byte[] echest, int level, String tag, boolean pvp,
+	                            boolean anchor, List<StoredPlayer> players, List<String> bans, List<String> allies,
+	                            List<String> allyRequests, List<String> warps, List<String> claimedChests,
+	                            Map<String, String> meta) {
+		private TeamSnapshot {
+			echest = echest == null ? null : echest.clone();
+			players = List.copyOf(players);
+			bans = List.copyOf(bans);
+			allies = List.copyOf(allies);
+			allyRequests = List.copyOf(allyRequests);
+			warps = List.copyOf(warps);
+			claimedChests = List.copyOf(claimedChests);
+			meta = Map.copyOf(meta);
+		}
+
+		@Override
+		public byte[] echest() {
+			return echest == null ? null : echest.clone();
+		}
 	}
 
 	private void saveSnapshot(TeamSnapshot snapshot) throws SQLException {
