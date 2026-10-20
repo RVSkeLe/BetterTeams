@@ -5,6 +5,7 @@ import com.booksaw.betterTeams.Team;
 import com.booksaw.betterTeams.TeamPlayer;
 import com.booksaw.betterTeams.message.MessageManager;
 import com.booksaw.betterTeams.text.LegacyTextUtils;
+import org.bukkit.Bukkit;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -15,6 +16,7 @@ import org.bukkit.event.player.PlayerQuitEvent;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ExecutionException;
 
 public class ChatManagement implements Listener {
 
@@ -90,11 +92,29 @@ public class ChatManagement implements Listener {
 			return;
 		}
 
-		if (doPrefix != PrefixType.NONE) {
-			event.setFormat(LegacyTextUtils.parseAllAdventure(doPrefix.getUpdatedFormat(p, event.getFormat(), team)));
+		PrefixType prefixType = doPrefix;
+		if (prefixType != PrefixType.NONE) {
+			event.setFormat(LegacyTextUtils.parseAllAdventure(getUpdatedFormat(prefixType, p, event.getFormat(), team)));
 			// event.setFormat(ChatColor.AQUA + "[" + team.getName() + "] " + ChatColor.WHITE + event.getFormat());
 		}
 
+	}
+
+	private String getUpdatedFormat(PrefixType prefixType, Player player, String format, Team team) {
+		if (Bukkit.isPrimaryThread()) {
+			return prefixType.getUpdatedFormat(player, format, team);
+		}
+
+		try {
+			return Bukkit.getScheduler().callSyncMethod(Main.plugin,
+					() -> prefixType.getUpdatedFormat(player, format, team)).get();
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+			return format;
+		} catch (ExecutionException e) {
+			Main.plugin.getLogger().warning("Could not format the team chat prefix: " + e.getCause());
+			return format;
+		}
 	}
 
 	@EventHandler

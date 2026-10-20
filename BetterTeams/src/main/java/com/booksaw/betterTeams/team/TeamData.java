@@ -26,6 +26,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 public class TeamData {
@@ -45,7 +46,7 @@ public class TeamData {
 	}
 
 	private final int minScore;
-	private final Set<TeamPlayer> members = new HashSet<>();
+	private final Set<TeamPlayer> members = ConcurrentHashMap.newKeySet();
 	private final Set<UUID> anchoredPlayers = new HashSet<>();
 	private final Set<UUID> allies = new HashSet<>();
 	private final Set<UUID> bannedPlayers = new HashSet<>();

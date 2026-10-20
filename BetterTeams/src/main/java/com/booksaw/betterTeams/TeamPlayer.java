@@ -31,16 +31,16 @@ public class TeamPlayer {
 	 */
 	@Setter
 	@Getter
-	private PlayerRank rank;
+	private volatile PlayerRank rank;
 
 	/**
 	 * This stores if the team is messaging to the team chat or the global chat
 	 */
 	@Setter
-	private boolean teamChat = false;
+	private volatile boolean teamChat = false;
 
 	@Setter
-	private boolean allyChat = false;
+	private volatile boolean allyChat = false;
 
 	/**
 	 * Do not use this method (only should be used in the class Team, instead use
@@ -48,7 +48,7 @@ public class TeamPlayer {
 	 */
 	@Setter
 	@Getter
-	private String title;
+	private volatile String title;
 
 	/*
 	 * Whether or not this player accepts having their respawn location changed by team home anchor
@@ -57,7 +57,7 @@ public class TeamPlayer {
 	 * See Team.setPlayerAnchor(anchor)
 	 */
 	@Setter
-	private boolean anchor = false;
+	private volatile boolean anchor = false;
 
 	/**
 	 * Used to create a new player

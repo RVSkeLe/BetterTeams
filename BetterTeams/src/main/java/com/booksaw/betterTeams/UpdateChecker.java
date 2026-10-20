@@ -1,7 +1,6 @@
 package com.booksaw.betterTeams;
 
 import com.booksaw.betterTeams.message.MessageManager;
-import net.md_5.bungee.api.ChatColor;
 import org.bukkit.Bukkit;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
@@ -26,7 +25,7 @@ public class UpdateChecker implements Listener {
 	private final String localPluginVersion;
 
 	private String spigotPluginVersion;
-	private boolean latest = true;
+	private volatile boolean latest = true;
 
 	public UpdateChecker(JavaPlugin javaPlugin) {
 		this.javaPlugin = javaPlugin;
@@ -47,9 +46,7 @@ public class UpdateChecker implements Listener {
 							UpdateChecker.this.spigotPluginVersion = reader.readLine();
 						}
 					} catch (IOException | URISyntaxException e) {
-						Bukkit.getServer().getConsoleSender().sendMessage(
-								ChatColor.translateAlternateColorCodes('&',
-										"&cUpdate checker failed! Disabling."));
+						Main.plugin.getLogger().warning("Update checker failed; disabling update checks.");
 						cancel();
 						return;
 					}
@@ -57,8 +54,9 @@ public class UpdateChecker implements Listener {
 					if (isLatestVersion())
 						return;
 
-					Main.plugin.getLogger().warning(MessageManager.getMessage("admin.update"));
 					latest = false;
+					Bukkit.getScheduler().runTask(javaPlugin,
+							() -> Main.plugin.getLogger().warning(MessageManager.getMessage("admin.update")));
 					cancel();
 			}
 		}.runTaskTimerAsynchronously(Main.plugin, 1, 10 * 60 * 20L);

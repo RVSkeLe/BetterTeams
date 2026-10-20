@@ -23,53 +23,49 @@ public class BaltopCommand extends SubCommand {
 
 		Team team = teamPre;
 
-		MessageManager.sendMessage(sender, "loading");
+		boolean contained = false;
+		String[] teams = Team.getTeamManager().sortTeamsByBalance();
+		MessageManager.sendMessage(sender, "baltop.leaderboard");
 
-		Main.plugin.getServer().getScheduler().runTaskAsynchronously(Main.plugin, () -> {
-			boolean contained = false;
-			String[] teams = Team.getTeamManager().sortTeamsByBalance();
-			MessageManager.sendMessage(sender, "baltop.leaderboard");
-
-			for (int i = 0; i < 10 && i < teams.length; i++) {
-				Team tempTeam = Team.getTeamByTeamName(teams[i]);
-				if (tempTeam == null) {
-					Main.plugin.getLogger().severe("Could not load team `" + teams[i] + "` from SQLite storage");
-					continue;
-				}
-				MessageManager.sendMessage(sender, "baltop.syntax", i + 1, tempTeam.getName(), tempTeam.getBalance());
-				if (team == tempTeam) {
-					contained = true;
-				}
+		for (int i = 0; i < 10 && i < teams.length; i++) {
+			Team tempTeam = Team.getTeamByTeamName(teams[i]);
+			if (tempTeam == null) {
+				Main.plugin.getLogger().severe("Could not load team `" + teams[i] + "` from SQLite storage");
+				continue;
 			}
-
-			if (!contained && team != null) {
-				try {
-					int rank = 0;
-					for (int i = 10; i < teams.length; i++) {
-						if (teams[i].equals(team.getName())) {
-							rank = i + 1;
-							break;
-						}
-					}
-					if (rank != 0) {
-						MessageManager.sendMessage(sender, "baltop.divide");
-						if (rank - 2 > 9) {
-							Team tm2 = Team.getTeamByTeamName(teams[rank - 2]);
-							MessageManager.sendMessage(sender, "baltop.syntax", rank - 1, tm2.getName(), tm2.getBalance());
-						}
-
-						MessageManager.sendMessage(sender, "baltop.syntax", rank, team.getName(), team.getBalance());
-
-						if (teams.length > rank) {
-							Team tm = Team.getTeamByTeamName(teams[rank]);
-							MessageManager.sendMessage(sender, "baltop.syntax", rank + 1, tm.getName(), tm.getBalance());
-						}
-					}
-				} catch (ArrayIndexOutOfBoundsException e) {
-						// to save an additional check on arrays length
-				}
+			MessageManager.sendMessage(sender, "baltop.syntax", i + 1, tempTeam.getName(), tempTeam.getBalance());
+			if (team == tempTeam) {
+				contained = true;
 			}
-		});
+		}
+
+		if (!contained && team != null) {
+			try {
+				int rank = 0;
+				for (int i = 10; i < teams.length; i++) {
+					if (teams[i].equals(team.getName())) {
+						rank = i + 1;
+						break;
+					}
+				}
+				if (rank != 0) {
+					MessageManager.sendMessage(sender, "baltop.divide");
+					if (rank - 2 > 9) {
+						Team tm2 = Team.getTeamByTeamName(teams[rank - 2]);
+						MessageManager.sendMessage(sender, "baltop.syntax", rank - 1, tm2.getName(), tm2.getBalance());
+					}
+
+					MessageManager.sendMessage(sender, "baltop.syntax", rank, team.getName(), team.getBalance());
+
+					if (teams.length > rank) {
+						Team tm = Team.getTeamByTeamName(teams[rank]);
+						MessageManager.sendMessage(sender, "baltop.syntax", rank + 1, tm.getName(), tm.getBalance());
+					}
+				}
+			} catch (ArrayIndexOutOfBoundsException e) {
+					// to save an additional check on arrays length
+			}
+		}
 
 		return new CommandResponse(true);
 	}

@@ -76,13 +76,23 @@ public class BooksawCommand extends BukkitCommand {
 				response = subCommand.onCommand(sender, label, args);
 			}
 
-			if (response != null)
-				response.sendResponseMessage(sender);
+			if (response != null) {
+				if (Bukkit.isPrimaryThread()) {
+					response.sendResponseMessage(sender);
+				} else {
+					Bukkit.getScheduler().runTask(Main.plugin, () -> response.sendResponseMessage(sender));
+				}
+			}
 		} catch (Exception e) {
 			Main.plugin.getLogger().severe(
 					"Something went wrong while executing the command, please report this https://github.com/booksaw/BetterTeams/issues/new/choose");
 			e.printStackTrace();
-			MessageManager.sendMessage(sender, "internalError");
+			if (Bukkit.isPrimaryThread()) {
+				MessageManager.sendMessage(sender, "internalError");
+			} else {
+				Bukkit.getScheduler().runTask(Main.plugin,
+						() -> MessageManager.sendMessage(sender, "internalError"));
+			}
 		}
 	}
 

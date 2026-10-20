@@ -58,12 +58,26 @@ public class TeamMessageController {
 	private final Team team;
 
 	public void sendTeamChatMessage(TeamPlayer sender, String message) {
+		if (!Bukkit.isPrimaryThread()) {
+			Bukkit.getScheduler().runTask(Main.plugin, () -> sendTeamChatMessage(sender, message));
+			return;
+		}
+		if (!team.getMembersClone().contains(sender)) {
+			return;
+		}
 		Set<TeamPlayer> recipients = team.getMembersClone();
 
 		sendTeamMessage(sender, message, recipients, TeamMessageType.TEAM_CHAT_MESSAGE);
 	}
 
 	public void sendAllyChatMessage(TeamPlayer sender, String message) {
+		if (!Bukkit.isPrimaryThread()) {
+			Bukkit.getScheduler().runTask(Main.plugin, () -> sendAllyChatMessage(sender, message));
+			return;
+		}
+		if (!team.getMembersClone().contains(sender)) {
+			return;
+		}
 		Set<TeamPlayer> recipients = team.getMembersClone();
 		team.getAlliesClone().stream().map(Team::getTeam).filter(Objects::nonNull)
 				.forEach(team -> recipients.addAll(team.getMembersClone()));
