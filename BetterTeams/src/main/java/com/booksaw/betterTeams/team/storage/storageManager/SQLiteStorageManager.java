@@ -32,7 +32,14 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Supplier;
 
 public class SQLiteStorageManager extends TeamManager {
 
@@ -46,7 +53,16 @@ public class SQLiteStorageManager extends TeamManager {
 	private final Map<String, UUID> teamNameIndex = new ConcurrentHashMap<>();
 	private final Map<String, UUID> claims = new ConcurrentHashMap<>();
 	private final Set<UUID> deletedTeams = ConcurrentHashMap.newKeySet();
-	private final AtomicBoolean flushing = new AtomicBoolean(false);
+	private volatile Thread databaseThread;
+	private final ScheduledExecutorService databaseExecutor = Executors.newSingleThreadScheduledExecutor(runnable -> {
+		Thread thread = new Thread(runnable, "BetterTeams-SQLite-Database");
+		thread.setDaemon(false);
+		databaseThread = thread;
+		return thread;
+	});
+	private final AtomicBoolean flushRequestQueued = new AtomicBoolean();
+	private volatile boolean shuttingDown;
+	private final AtomicBoolean flushQueued = new AtomicBoolean();
 	private int saveIntervalSeconds;
 
 	public SQLiteStorageManager() {
@@ -63,13 +79,55 @@ public class SQLiteStorageManager extends TeamManager {
 			Main.plugin.getLogger().severe(e.getMessage());
 			e.printStackTrace();
 			Main.plugin.getServer().getPluginManager().disablePlugin(Main.plugin);
+			throw new IllegalStateException("Could not migrate BetterTeams storage", e);
 		}
 	}
 
 	@Override
 	public void disable() {
-		flushDirtyTeams(true);
-		database.closeConnection();
+		shuttingDown = true;
+		QueuedFlush finalFlush = queueFlush(true);
+		Future<?> shutdownBarrier = null;
+		try {
+			shutdownBarrier = databaseExecutor.submit(() -> {
+			});
+			databaseExecutor.shutdown();
+
+			if (finalFlush != null) {
+				try {
+					finalFlush.future().get(30, TimeUnit.SECONDS);
+					completeFlush(finalFlush.job());
+				} catch (InterruptedException e) {
+					Thread.currentThread().interrupt();
+					restoreFlush(finalFlush.job());
+					Main.plugin.getLogger().severe("Interrupted while flushing cached team storage to SQLite");
+				} catch (ExecutionException | java.util.concurrent.TimeoutException e) {
+					restoreFlush(finalFlush.job());
+					Main.plugin.getLogger().log(java.util.logging.Level.SEVERE,
+							"Could not flush cached team storage to SQLite during shutdown", e);
+				}
+			}
+
+			if (shutdownBarrier != null) {
+				shutdownBarrier.get(30, TimeUnit.SECONDS);
+			}
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+			Main.plugin.getLogger().severe("Interrupted while shutting down the SQLite database executor");
+		} catch (ExecutionException | java.util.concurrent.TimeoutException e) {
+			Main.plugin.getLogger().log(java.util.logging.Level.SEVERE,
+					"Could not shut down the SQLite database executor cleanly", e);
+		} finally {
+			if (!databaseExecutor.isTerminated()) {
+				databaseExecutor.shutdownNow();
+			}
+			try {
+				databaseExecutor.awaitTermination(5, TimeUnit.SECONDS);
+			} catch (InterruptedException e) {
+				Thread.currentThread().interrupt();
+			}
+			database.closeConnection();
+		}
 	}
 
 	@Override
@@ -96,16 +154,23 @@ public class SQLiteStorageManager extends TeamManager {
 
 	@Override
 	public void loadTeams() {
-		List<UUID> teamIds = new ArrayList<>();
-		try (PreparedStatement preparedStatement = database.select("teamID", TableName.TEAM)) {
-			ResultSet results = preparedStatement.executeQuery();
-			while (results.next()) {
-				teamIds.add(UUID.fromString(results.getString("teamID")));
+		List<UUID> teamIds = executeOnDatabaseThread(() -> {
+			List<UUID> ids = new ArrayList<>();
+			try (PreparedStatement preparedStatement = database.select("teamID", TableName.TEAM)) {
+				ResultSet results = preparedStatement.executeQuery();
+				while (results.next()) {
+					String teamId = results.getString("teamID");
+					try {
+						ids.add(UUID.fromString(teamId));
+					} catch (IllegalArgumentException e) {
+						Main.plugin.getLogger().warning("Skipping team with invalid UUID in SQLite: " + teamId);
+					}
+				}
+			} catch (SQLException e) {
+				throw new IllegalStateException("Could not load teams from SQLite", e);
 			}
-		} catch (SQLException e) {
-			Main.plugin.getLogger().severe("Could not load teams from SQLite");
-			e.printStackTrace();
-		}
+			return ids;
+		});
 
 		for (UUID teamId : teamIds) {
 			loadTeam(teamId);
@@ -120,12 +185,29 @@ public class SQLiteStorageManager extends TeamManager {
 			return;
 		}
 
+		Team team = null;
 		try {
-			Team team = new Team(uuid);
-			loadedTeams.put(uuid, team);
+			team = new Team(uuid);
 			indexTeam(team);
-		} catch (IllegalArgumentException e) {
-			Main.plugin.getLogger().warning("Skipping invalid team " + uuid);
+			loadedTeams.put(uuid, team);
+		} catch (RuntimeException e) {
+			removeFailedTeamLoad(uuid, team);
+			Main.plugin.getLogger().log(java.util.logging.Level.WARNING, "Skipping invalid team " + uuid, e);
+		}
+	}
+
+	private void removeFailedTeamLoad(UUID uuid, Team team) {
+		loadedTeams.remove(uuid);
+		SQLiteTeamStorage storage = storageCache.remove(uuid);
+		if (team == null) {
+			return;
+		}
+		if (team.getName() != null) {
+			teamNameIndex.remove(normalizeName(team.getName()), uuid);
+		}
+		unindexTeamPlayers(team);
+		if (storage != null) {
+			storage.getClaimedChests().forEach(location -> claims.remove(location, uuid));
 		}
 	}
 
@@ -149,16 +231,25 @@ public class SQLiteStorageManager extends TeamManager {
 		deletedTeams.add(team.getID());
 		loadedTeams.remove(team.getID());
 		SQLiteTeamStorage storage = storageCache.remove(team.getID());
-		teamNameIndex.remove(normalizeName(team.getName()));
+		if (team.getName() != null) {
+			teamNameIndex.remove(normalizeName(team.getName()), team.getID());
+		}
 		unindexTeamPlayers(team);
 		if (storage != null) {
-			storage.getClaimedChests().forEach(claims::remove);
+			storage.getClaimedChests().forEach(location -> claims.remove(location, team.getID()));
 		}
 	}
 
 	@Override
 	public void teamNameChange(Team team, String newName) {
-		teamNameIndex.remove(normalizeName(team.getName()));
+		if (newName == null) {
+			throw new IllegalArgumentException("Team name cannot be null");
+		}
+		UUID existingTeam = teamNameIndex.get(normalizeName(newName));
+		if (existingTeam != null && !existingTeam.equals(team.getID())) {
+			throw new IllegalArgumentException("A team with that name already exists");
+		}
+		teamNameIndex.remove(normalizeName(team.getName()), team.getID());
 		teamNameIndex.put(normalizeName(newName), team.getID());
 	}
 
@@ -227,17 +318,19 @@ public class SQLiteStorageManager extends TeamManager {
 
 	@Override
 	public List<String> getHoloDetails() {
-		String serialized = database.getResult("dataValue", TableName.PLUGIN_DATA, "dataKey = '" + HOLOPATH + "'");
-		if (serialized.isEmpty()) {
-			return new ArrayList<>();
-		}
-		return new ArrayList<>(Arrays.asList(serialized.split("\\R")));
+		return executeOnDatabaseThread(() -> {
+			String serialized = database.getResult("dataValue", TableName.PLUGIN_DATA, "dataKey = ?", HOLOPATH);
+			if (serialized == null || serialized.isEmpty()) {
+				return new ArrayList<>();
+			}
+			return new ArrayList<>(Arrays.asList(serialized.split("\\R")));
+		});
 	}
 
 	@Override
 	public void setHoloDetails(List<String> details) {
-		database.executeStatement("INSERT INTO %s (dataKey, dataValue) VALUES (?, ?) ON CONFLICT(dataKey) DO UPDATE SET dataValue = excluded.dataValue"
-				.formatted(TableName.PLUGIN_DATA), HOLOPATH, String.join("\n", details));
+		executeOnDatabaseThread(() -> database.executeStatement("INSERT INTO %s (dataKey, dataValue) VALUES (?, ?) ON CONFLICT(dataKey) DO UPDATE SET dataValue = excluded.dataValue"
+				.formatted(TableName.PLUGIN_DATA), HOLOPATH, String.join("\n", details)));
 	}
 
 	@Override
@@ -271,6 +364,20 @@ public class SQLiteStorageManager extends TeamManager {
 
 	private void indexTeam(Team team) {
 		if (team.getName() != null) {
+			String normalizedName = normalizeName(team.getName());
+			UUID existingTeam = teamNameIndex.get(normalizedName);
+			if (existingTeam != null && !existingTeam.equals(team.getID())) {
+				throw new IllegalArgumentException("Duplicate team name in SQLite: " + team.getName());
+			}
+		}
+		for (TeamPlayer player : team.getMembersClone()) {
+			UUID existingTeam = playerTeamIndex.get(player.getPlayerUUID());
+			if (existingTeam != null && !existingTeam.equals(team.getID())) {
+				throw new IllegalArgumentException("Player " + player.getPlayerUUID()
+						+ " is stored in multiple teams");
+			}
+		}
+		if (team.getName() != null) {
 			teamNameIndex.put(normalizeName(team.getName()), team.getID());
 		}
 		indexTeamPlayers(team);
@@ -284,20 +391,70 @@ public class SQLiteStorageManager extends TeamManager {
 	private void startPeriodicFlush() {
 		saveIntervalSeconds = Math.max(1, Main.plugin.getConfig().getInt(
 				"database.saveIntervalSeconds", DEFAULT_SAVE_INTERVAL_SECONDS));
-		long intervalTicks = saveIntervalSeconds * 20L;
-		Bukkit.getScheduler().runTaskTimerAsynchronously(Main.plugin, () -> flushDirtyTeams(false), intervalTicks, intervalTicks);
+		databaseExecutor.scheduleAtFixedRate(this::requestPeriodicFlush,
+				saveIntervalSeconds, saveIntervalSeconds, TimeUnit.SECONDS);
 	}
 
-	public void flushDirtyTeams(boolean force) {
-		if (!flushing.compareAndSet(false, true)) {
+	private void requestPeriodicFlush() {
+		if (shuttingDown || !flushRequestQueued.compareAndSet(false, true)) {
 			return;
 		}
 
-		List<UUID> deletes = new ArrayList<>(deletedTeams);
-		deletes.forEach(deletedTeams::remove);
+		try {
+			Bukkit.getScheduler().runTask(Main.plugin, () -> {
+				flushRequestQueued.set(false);
+				if (!shuttingDown) {
+					flushDirtyTeams(false);
+				}
+			});
+		} catch (RuntimeException e) {
+			flushRequestQueued.set(false);
+			Main.plugin.getLogger().log(java.util.logging.Level.WARNING,
+					"Could not schedule periodic SQLite flush on the Paper thread", e);
+		}
+	}
 
-		List<TeamSnapshot> snapshots = new ArrayList<>();
+	public void flushDirtyTeams(boolean force) {
+		QueuedFlush queuedFlush = queueFlush(force);
+		if (queuedFlush == null) {
+			return;
+		}
+
+		databaseExecutor.execute(() -> {
+			boolean successful = false;
+			try {
+				queuedFlush.future().get();
+				successful = true;
+			} catch (InterruptedException e) {
+				Thread.currentThread().interrupt();
+			} catch (ExecutionException e) {
+				Main.plugin.getLogger().log(java.util.logging.Level.SEVERE,
+						"Could not flush cached team storage to SQLite", e.getCause());
+			}
+
+			if (shuttingDown) {
+				return;
+			}
+
+			boolean flushSucceeded = successful;
+			Bukkit.getScheduler().runTask(Main.plugin, () -> {
+				if (flushSucceeded) {
+					completeFlush(queuedFlush.job());
+				} else {
+					restoreFlush(queuedFlush.job());
+				}
+			});
+		});
+	}
+
+	private QueuedFlush queueFlush(boolean force) {
+		if (!force && !flushQueued.compareAndSet(false, true)) {
+			return null;
+		}
+
+		List<UUID> deletes = new ArrayList<>(deletedTeams);
 		List<SQLiteTeamStorage> snapshottedStorages = new ArrayList<>();
+		List<TeamSnapshot> snapshots = new ArrayList<>();
 		for (SQLiteTeamStorage storage : storageCache.values()) {
 			TeamSnapshot snapshot = storage.snapshot(force);
 			if (snapshot != null) {
@@ -307,33 +464,86 @@ public class SQLiteStorageManager extends TeamManager {
 		}
 
 		if (deletes.isEmpty() && snapshots.isEmpty()) {
-			flushing.set(false);
-			return;
+			flushQueued.set(false);
+			return null;
 		}
 
+		FlushJob job = new FlushJob(deletes, snapshottedStorages, snapshots);
+		try {
+			flushQueued.set(true);
+			Future<?> future = databaseExecutor.submit(() -> executeFlush(job));
+			return new QueuedFlush(job, future);
+		} catch (RejectedExecutionException e) {
+			restoreFlush(job);
+			throw e;
+		}
+	}
+
+	private void executeFlush(FlushJob job) {
 		try {
 			database.executeStatementOrThrow("BEGIN IMMEDIATE TRANSACTION");
-			for (UUID deletedTeam : deletes) {
+			for (UUID deletedTeam : job.deletes()) {
 				database.executeStatementOrThrow("DELETE FROM %s WHERE teamID = ?".formatted(TableName.TEAM),
 						deletedTeam.toString());
 			}
-			for (TeamSnapshot snapshot : snapshots) {
+			for (TeamSnapshot snapshot : job.snapshots()) {
 				saveSnapshot(snapshot);
 			}
 			database.executeStatementOrThrow("COMMIT");
 		} catch (SQLException | RuntimeException e) {
 			try {
 				database.executeStatementOrThrow("ROLLBACK");
-			} catch (SQLException rollbackException) {
+			} catch (SQLException | RuntimeException rollbackException) {
 				e.addSuppressed(rollbackException);
 			}
-			deletedTeams.addAll(deletes);
-			snapshottedStorages.forEach(SQLiteTeamStorage::restoreDirty);
-			Main.plugin.getLogger().severe("Could not flush cached team storage to SQLite");
-			e.printStackTrace();
-		} finally {
-			flushing.set(false);
+			throw new IllegalStateException("Could not flush cached team storage to SQLite", e);
 		}
+	}
+
+	private void completeFlush(FlushJob job) {
+		job.deletes().forEach(deletedTeams::remove);
+		flushQueued.set(false);
+		if (!shuttingDown && (!deletedTeams.isEmpty() || storageCache.values().stream().anyMatch(SQLiteTeamStorage::isDirty))) {
+			flushDirtyTeams(false);
+		}
+	}
+
+	private void restoreFlush(FlushJob job) {
+		deletedTeams.addAll(job.deletes());
+		job.snapshottedStorages().forEach(SQLiteTeamStorage::restoreDirty);
+		flushQueued.set(false);
+	}
+
+	public <T> T executeOnDatabaseThread(Supplier<T> action) {
+		if (Thread.currentThread() == databaseThread) {
+			return action.get();
+		}
+
+		try {
+			return databaseExecutor.submit(action::get).get();
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+			throw new IllegalStateException("Interrupted while executing SQLite operation", e);
+		} catch (ExecutionException e) {
+			if (e.getCause() instanceof RuntimeException runtimeException) {
+				throw runtimeException;
+			}
+			throw new IllegalStateException("Could not execute SQLite operation", e.getCause());
+		}
+	}
+
+	public void executeOnDatabaseThread(Runnable action) {
+		executeOnDatabaseThread(() -> {
+			action.run();
+			return null;
+		});
+	}
+
+	private record FlushJob(List<UUID> deletes, List<SQLiteTeamStorage> snapshottedStorages,
+	                        List<TeamSnapshot> snapshots) {
+	}
+
+	private record QueuedFlush(FlushJob job, Future<?> future) {
 	}
 
 	private void saveSnapshot(TeamSnapshot snapshot) throws SQLException {

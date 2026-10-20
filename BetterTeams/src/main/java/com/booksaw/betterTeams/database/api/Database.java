@@ -70,17 +70,19 @@ public class Database {
 	 * more permanent solution. A popular library is HikariCP
 	 * (https://github.com/brettwooldridge/HikariCP)
 	 */
-	private void resetConnection() {
+	private void resetConnection() throws SQLException {
 		if (connection == null) {
-			throw new IllegalStateException("No SQL connection has been established");
+			throw new SQLException("No SQL connection has been established");
 		}
 
-		try {
-			connection.close();
-			connection = DriverManager.getConnection("jdbc:sqlite:" + databaseFile.getAbsolutePath());
-			setupSqliteConnection();
-		} catch (SQLException e) {
-			e.printStackTrace();
+		connection.close();
+		connection = DriverManager.getConnection("jdbc:sqlite:" + databaseFile.getAbsolutePath());
+		setupSqliteConnection();
+	}
+
+	private void ensureConnection() throws SQLException {
+		if (connection == null || connection.isClosed() || !connection.isValid(2)) {
+			resetConnection();
 		}
 	}
 
@@ -181,17 +183,12 @@ public class Database {
 			Main.plugin.getLogger().severe("Something went wrong while executing SQL");
 			Main.plugin.getLogger().severe("SQL: " + statement);
 			e.printStackTrace();
+			throw new IllegalStateException("Could not execute SQL statement", e);
 		}
 	}
 
 	public void executeStatementOrThrow(String statement, Object... placeholders) throws SQLException {
-		try {
-			if (!connection.isValid(2)) {
-				resetConnection();
-			}
-		} catch (SQLException e) {
-			// this error is never thrown as the timeout is > 0
-		}
+		ensureConnection();
 
 		try (PreparedStatement ps = connection.prepareStatement(statement)) {
 			for (int i = 0; i < placeholders.length; i++) {
@@ -212,19 +209,23 @@ public class Database {
 	 * @param query The query to execute
 	 * @return The results of the query
 	 */
-	public PreparedStatement executeQuery(String query) {
-
+	public PreparedStatement executeQuery(String query, Object... placeholders) {
 		try {
-			if (!connection.isValid(2)) {
-				resetConnection();
+			ensureConnection();
+			PreparedStatement statement = connection.prepareStatement(query);
+			for (int i = 0; i < placeholders.length; i++) {
+				if (placeholders[i] instanceof byte[] bytes) {
+					statement.setBytes(i + 1, bytes);
+				} else {
+					statement.setObject(i + 1, placeholders[i]);
+				}
 			}
-			return connection.prepareStatement(query);
+			return statement;
 		} catch (SQLException e) {
 			Main.plugin.getLogger().severe("Something went wrong while executing SQL");
 			Main.plugin.getLogger().severe("SQL: " + query);
-			e.printStackTrace();
+			throw new IllegalStateException("Could not prepare SQL query", e);
 		}
-		return null;
 
 	}
 

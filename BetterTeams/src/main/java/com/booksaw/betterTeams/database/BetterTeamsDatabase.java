@@ -121,8 +121,8 @@ public class BetterTeamsDatabase extends Database {
 	 * @param where  the condition required for the data to be included
 	 * @return the resultant resultSet
 	 */
-	public PreparedStatement selectWhere(String select, TableName from, String where) {
-		return executeQuery("SELECT %s FROM %s WHERE %s;".formatted(select, from.toString(), where));
+	public PreparedStatement selectWhere(String select, TableName from, String where, Object... placeholders) {
+		return executeQuery("SELECT %s FROM %s WHERE %s;".formatted(select, from.toString(), where), placeholders);
 	}
 
 	/**
@@ -148,9 +148,9 @@ public class BetterTeamsDatabase extends Database {
 	 * @param where the condition required for the data to be included
 	 * @return if the query has a result
 	 */
-	public boolean hasResult(TableName from, String where) {
+	public boolean hasResult(TableName from, String where, Object... placeholders) {
 
-		try (PreparedStatement ps = selectWhere("*", from, where)) {
+		try (PreparedStatement ps = selectWhere("*", from, where, placeholders)) {
 			ResultSet result = ps.executeQuery();
 			if (result == null) {
 				return false;
@@ -172,9 +172,9 @@ public class BetterTeamsDatabase extends Database {
 	 * @return the first returned result, the specified column. Will return "" if an
 	 * error occurs
 	 */
-	public String getResult(String column, TableName from, String where) {
+	public String getResult(String column, TableName from, String where, Object... placeholders) {
 
-		try (PreparedStatement pr = selectWhere(column, from, where)) {
+		try (PreparedStatement pr = selectWhere(column, from, where, placeholders)) {
 			ResultSet results = pr.executeQuery();
 			if (results.next()) {
 				return results.getString(column);

@@ -49,11 +49,15 @@ public class SQLiteTeamStorage extends TeamStorage {
 	}
 
 	private String getCondition() {
-		return "teamID LIKE '" + team.getID() + "'";
+		return "teamID = ?";
 	}
 
 	private void loadFromDatabase() {
-		try (PreparedStatement ps = storageManager.getDatabase().selectWhere("*", TableName.TEAM, getCondition())) {
+		storageManager.executeOnDatabaseThread(this::loadFromDatabaseLocked);
+	}
+
+	private void loadFromDatabaseLocked() {
+		try (PreparedStatement ps = storageManager.getDatabase().selectWhere("*", TableName.TEAM, getCondition(), team.getID().toString())) {
 			ResultSet result = ps.executeQuery();
 			if (!result.next()) {
 				return;
@@ -72,7 +76,7 @@ public class SQLiteTeamStorage extends TeamStorage {
 			putLoaded(StoredTeamValue.ANCHOR.getReference(), result.getBoolean("anchor"));
 			echest = result.getBytes("echest");
 		} catch (SQLException e) {
-			e.printStackTrace();
+			throw new IllegalStateException("Could not load team " + team.getID(), e);
 		}
 
 		loadPlayers();
@@ -91,7 +95,7 @@ public class SQLiteTeamStorage extends TeamStorage {
 	}
 
 	private void loadPlayers() {
-		try (PreparedStatement ps = storageManager.getDatabase().selectWhere("*", TableName.PLAYERS, getCondition())) {
+		try (PreparedStatement ps = storageManager.getDatabase().selectWhere("*", TableName.PLAYERS, getCondition(), team.getID().toString())) {
 			ResultSet result = ps.executeQuery();
 			while (result.next()) {
 				UUID playerUuid = UUID.fromString(result.getString("playerUUID"));
@@ -99,56 +103,56 @@ public class SQLiteTeamStorage extends TeamStorage {
 						result.getString("title"), result.getBoolean("anchor")));
 			}
 		} catch (SQLException e) {
-			e.printStackTrace();
+			throw new IllegalStateException("Could not load players for team " + team.getID(), e);
 		}
 	}
 
 	private void loadSimpleSet(TableName tableName, String column, Set<String> target) {
-		try (PreparedStatement ps = storageManager.getDatabase().selectWhere(column, tableName, getCondition())) {
+		try (PreparedStatement ps = storageManager.getDatabase().selectWhere(column, tableName, getCondition(), team.getID().toString())) {
 			ResultSet result = ps.executeQuery();
 			while (result.next()) {
 				target.add(result.getString(column));
 			}
 		} catch (SQLException e) {
-			e.printStackTrace();
+			throw new IllegalStateException("Could not load " + tableName + " for team " + team.getID(), e);
 		}
 	}
 
 	private void loadAllies() {
 		String teamId = team.getID().toString();
 		try (PreparedStatement ps = storageManager.getDatabase().selectWhere("*", TableName.ALLIES,
-				"team1ID LIKE '" + teamId + "' OR team2ID LIKE '" + teamId + "'")) {
+				"team1ID = ? OR team2ID = ?", teamId, teamId)) {
 			ResultSet result = ps.executeQuery();
 			while (result.next()) {
 				String team1 = result.getString("team1ID");
 				allies.add(team1.equals(teamId) ? result.getString("team2ID") : team1);
 			}
 		} catch (SQLException e) {
-			e.printStackTrace();
+			throw new IllegalStateException("Could not load allies for team " + team.getID(), e);
 		}
 	}
 
 	private void loadAllyRequests() {
 		try (PreparedStatement ps = storageManager.getDatabase().selectWhere("*", TableName.ALLYREQUESTS,
-				"receivingTeamID LIKE '" + team.getID() + "'")) {
+				"receivingTeamID = ?", team.getID().toString())) {
 			ResultSet result = ps.executeQuery();
 			while (result.next()) {
 				allyRequests.add(result.getString("requestingTeamID"));
 			}
 		} catch (SQLException e) {
-			e.printStackTrace();
+			throw new IllegalStateException("Could not load ally requests for team " + team.getID(), e);
 		}
 	}
 
 	private void loadMeta() {
 		try (PreparedStatement ps = storageManager.getDatabase().selectWhere("*", TableName.TEAM_META,
-				"teamID = '" + team.getID() + "'")) {
+				"teamID = ?", team.getID().toString())) {
 			ResultSet result = ps.executeQuery();
 			while (result.next()) {
 				meta.put(result.getString("metaKey"), result.getString("metaValue"));
 			}
 		} catch (SQLException e) {
-			e.printStackTrace();
+			throw new IllegalStateException("Could not load metadata for team " + team.getID(), e);
 		}
 	}
 
@@ -465,6 +469,10 @@ public class SQLiteTeamStorage extends TeamStorage {
 				new ArrayList<>(warps),
 				new ArrayList<>(claimedChests),
 				new HashMap<>(meta));
+	}
+
+	public synchronized boolean isDirty() {
+		return dirty;
 	}
 
 	public synchronized void restoreDirty() {
