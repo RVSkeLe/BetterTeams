@@ -174,10 +174,7 @@ public class Main extends JavaPlugin {
 
 		Bukkit.getScheduler().cancelTasks(this);
 
-		for (Entry<Player, Team> temp : InventoryManagement.adminViewers.entrySet()) {
-			temp.getKey().closeInventory();
-			temp.getValue().saveEchest();
-		}
+		InventoryManagement.closeAll();
 
 		if (useHolograms) {
 			HologramManager.holoManager.disable();

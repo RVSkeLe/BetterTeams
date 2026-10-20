@@ -2,6 +2,7 @@ package com.booksaw.betterTeams.cost;
 
 import com.booksaw.betterTeams.Main;
 import com.booksaw.betterTeams.Team;
+import com.booksaw.betterTeams.util.ThreadGuard;
 import lombok.Getter;
 import net.milkbowl.vault.economy.EconomyResponse;
 import org.bukkit.entity.Player;
@@ -19,6 +20,9 @@ public class CommandCost {
 	 * @param cost    how long of a Cost that command has (in seconds)
 	 */
 	public CommandCost(String command, double cost) {
+		if (!Double.isFinite(cost) || cost < 0) {
+			throw new IllegalArgumentException("Command cost must be finite and non-negative");
+		}
 		this.command = command;
 		this.cost = cost;
 	}
@@ -31,6 +35,7 @@ public class CommandCost {
 	 * failure)
 	 */
 	public boolean runCommand(Player player) {
+		ThreadGuard.requirePrimaryThread();
 		if (player.hasPermission("betterteams.cost.bypass")) {
 			return true;
 		}
@@ -40,23 +45,42 @@ public class CommandCost {
 			return true;
 		}
 		double cost = this.cost;
+		double teamCost = 0;
+		Team team = null;
 		if (CostManager.costFromTeam) {
-			Team team = Team.getTeamByPlayer(player);
+			team = Team.getTeamByPlayer(player);
 
 			if (team != null) {
 				if (team.getMoney() >= cost) {
-					team.setMoney(team.getMoney() - cost);
-					return true;
+					teamCost = cost;
 				} else if (team.getMoney() > 0) {
-					cost -= team.getMoney();
-					team.setMoney(0);
+					teamCost = team.getMoney();
 				}
 			}
 
 		}
 
-		EconomyResponse response = Main.econ.withdrawPlayer(player, cost);
-		return response.transactionSuccess();
+		double playerCost = cost - teamCost;
+		if (playerCost > 0) {
+			EconomyResponse response = Main.econ.withdrawPlayer(player, playerCost);
+			if (response == null || !response.transactionSuccess()) {
+				return false;
+			}
+		}
+
+		if (teamCost > 0) {
+			if (team == null || !team.tryWithdrawMoney(teamCost)) {
+				if (playerCost > 0) {
+					EconomyResponse refund = Main.econ.depositPlayer(player, playerCost);
+					if (refund == null || !refund.transactionSuccess()) {
+						Main.plugin.getLogger().severe("Could not refund command cost for " + player.getUniqueId());
+					}
+				}
+				return false;
+			}
+		}
+
+		return true;
 	}
 
 	/**

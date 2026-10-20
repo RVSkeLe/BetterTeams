@@ -1,7 +1,7 @@
 package com.booksaw.betterTeams;
 
 import lombok.Getter;
-import lombok.Setter;
+import com.booksaw.betterTeams.util.ThreadGuard;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.OfflinePlayer;
@@ -29,24 +29,20 @@ public class TeamPlayer {
 	/**
 	 * The rank of the player within their team
 	 */
-	@Setter
 	@Getter
 	private volatile PlayerRank rank;
 
 	/**
 	 * This stores if the team is messaging to the team chat or the global chat
 	 */
-	@Setter
 	private volatile boolean teamChat = false;
 
-	@Setter
 	private volatile boolean allyChat = false;
 
 	/**
 	 * Do not use this method (only should be used in the class Team, instead use
 	 * Team.setTitle() as that will save the updated value)
 	 */
-	@Setter
 	@Getter
 	private volatile String title;
 
@@ -56,8 +52,10 @@ public class TeamPlayer {
 	 * of this player's team accordingly, otherwise the team will desync from this player around this vaule
 	 * See Team.setPlayerAnchor(anchor)
 	 */
-	@Setter
 	private volatile boolean anchor = false;
+
+	private volatile Runnable mutationListener = () -> {
+	};
 
 	/**
 	 * Used to create a new player
@@ -124,6 +122,39 @@ public class TeamPlayer {
 
 	public boolean isAnchored() {
 		return anchor;
+	}
+
+	public void setMutationListener(Runnable mutationListener) {
+		this.mutationListener = mutationListener == null ? () -> {
+		} : mutationListener;
+	}
+
+	public void setRank(PlayerRank rank) {
+		ThreadGuard.requirePrimaryThread();
+		this.rank = Objects.requireNonNull(rank, "rank cannot be null");
+		mutationListener.run();
+	}
+
+	public void setTeamChat(boolean teamChat) {
+		ThreadGuard.requirePrimaryThread();
+		this.teamChat = teamChat;
+	}
+
+	public void setAllyChat(boolean allyChat) {
+		ThreadGuard.requirePrimaryThread();
+		this.allyChat = allyChat;
+	}
+
+	public void setTitle(String title) {
+		ThreadGuard.requirePrimaryThread();
+		this.title = title;
+		mutationListener.run();
+	}
+
+	public void setAnchor(boolean anchor) {
+		ThreadGuard.requirePrimaryThread();
+		this.anchor = anchor;
+		mutationListener.run();
 	}
 
 	/**

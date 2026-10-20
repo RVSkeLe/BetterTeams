@@ -10,16 +10,17 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Arrays;
 
-@Getter
 public class Warp {
 
 	private final Location location;
+	@Getter
 	private final String name;
+	@Getter
 	private final String encrypPassword;
 
 	public Warp(String[] args) {
 		name = args[0];
-		location = TeamData.locationFromString(args[1]);
+		location = TeamData.locationFromString(args[1]).clone();
 
 		if (args.length == 3) {
 			encrypPassword = hashString(args[2]);
@@ -33,7 +34,7 @@ public class Warp {
 
 	public Warp(String name, Location location, String password) {
 		this.name = name;
-		this.location = location;
+		this.location = location.clone();
 		if (password != null && !password.isEmpty()) {
 			this.encrypPassword = hashString(password);
 		} else {
@@ -55,6 +56,10 @@ public class Warp {
 
 	public boolean hasPassword() {
 		return encrypPassword != null && !encrypPassword.isEmpty();
+	}
+
+	public Location getLocation() {
+		return location.clone();
 	}
 
 	public boolean isCorrectPassword(String password) {

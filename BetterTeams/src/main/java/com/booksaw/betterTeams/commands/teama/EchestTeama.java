@@ -14,8 +14,7 @@ public class EchestTeama extends TeamSelectSubCommand {
 	@Override
 	public CommandResponse onCommand(CommandSender sender, String label, String[] args, Team team) {
 
-		InventoryManagement.adminViewers.put((Player) sender, team);
-		((Player) sender).openInventory(team.getEchest());
+		InventoryManagement.open((Player) sender, team);
 
 		return new CommandResponse(true);
 	}

@@ -10,6 +10,7 @@ import com.booksaw.betterTeams.team.meta.TeamMeta;
 import com.booksaw.betterTeams.team.storage.team.StoredTeamValue;
 import com.booksaw.betterTeams.team.storage.team.TeamStorage;
 import com.booksaw.betterTeams.util.MoneyUtils;
+import com.booksaw.betterTeams.util.ThreadGuard;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Location;
@@ -55,6 +56,8 @@ public class TeamData {
 	private final Set<Warp> warps = new HashSet<>();
 	private final List<UUID> invitedPlayers = new ArrayList<>();
 	private final TeamMeta meta = new TeamMeta();
+	private Runnable mutationListener = () -> {
+	};
 	private Inventory echest;
 	private volatile String name;
 	private String description = "";
@@ -77,6 +80,7 @@ public class TeamData {
 	}
 
 	public void load(TeamStorage storage) {
+		ThreadGuard.requirePrimaryThread();
 		name = storage.getString(StoredTeamValue.NAME);
 		description = Optional.ofNullable(storage.getString(StoredTeamValue.DESCRIPTION)).orElse("");
 		open = storage.getBoolean(StoredTeamValue.OPEN);
@@ -84,13 +88,21 @@ public class TeamData {
 		useTeamHomeAsAnchor = storage.getBoolean(StoredTeamValue.ANCHOR);
 		color = parseColor(storage.getString(StoredTeamValue.COLOR));
 		score = Math.max(minScore, storage.getInt(StoredTeamValue.SCORE));
-		money = storage.getDouble(StoredTeamValue.MONEY);
+		double storedMoney = storage.getDouble(StoredTeamValue.MONEY);
+		if (!Double.isFinite(storedMoney) || storedMoney < 0) {
+			Main.plugin.getLogger().warning("Invalid balance stored for team; resetting it to zero");
+			storedMoney = 0;
+		}
+		money = storedMoney;
 		storage.getEchestContents(echest);
 		members.clear();
 		members.addAll(storage.getPlayerList());
 		anchoredPlayers.clear();
 		anchoredPlayers.addAll(storage.getAnchoredPlayerList());
 		syncMemberAnchors();
+		for (TeamPlayer member : members) {
+			member.setMutationListener(mutationListener);
+		}
 		bannedPlayers.clear();
 		bannedPlayers.addAll(parseUuids(storage.getBanList()));
 		allies.clear();
@@ -122,7 +134,8 @@ public class TeamData {
 		tag = Optional.ofNullable(storage.getString(StoredTeamValue.TAG)).orElse("");
 	}
 
-	public void initializeNew(String name, TeamStorage storage) {
+	public void initializeNew(String name) {
+		ThreadGuard.requirePrimaryThread();
 		this.name = name;
 		description = "";
 		open = false;
@@ -134,55 +147,57 @@ public class TeamData {
 		level = 1;
 		tag = "";
 
-		storage.set(StoredTeamValue.NAME, name);
-		storage.set(StoredTeamValue.DESCRIPTION, description);
-		storage.set(StoredTeamValue.OPEN, open);
-		storage.set(StoredTeamValue.PVP, pvp);
-		storage.set(StoredTeamValue.ANCHOR, useTeamHomeAsAnchor);
-		storage.set(StoredTeamValue.HOME, "");
-		storage.set(StoredTeamValue.COLOR, color.getChar());
-		saveClaims(storage);
-		saveMembers(storage);
-		saveAnchoredPlayers(storage);
-		storage.set(StoredTeamValue.LEVEL, level);
-		storage.set(StoredTeamValue.TAG, tag);
 	}
 
+	@Deprecated
+	public void initializeNew(String name, TeamStorage storage) {
+		initializeNew(name);
+		storage.markDirty();
+	}
+
+	@Deprecated
 	public void saveMembers(TeamStorage storage) {
-		storage.setPlayerList(members.stream().map(TeamPlayer::toString).collect(Collectors.toList()));
+		storage.markDirty();
 	}
 
+	@Deprecated
 	public void saveAnchoredPlayers(TeamStorage storage) {
-		storage.setAnchoredPlayerList(anchoredPlayers.stream().map(UUID::toString).collect(Collectors.toList()));
+		storage.markDirty();
 	}
 
+	@Deprecated
 	public void saveBans(TeamStorage storage) {
-		storage.setBanList(bannedPlayers.stream().map(UUID::toString).collect(Collectors.toList()));
+		storage.markDirty();
 	}
 
+	@Deprecated
 	public void saveAllies(TeamStorage storage) {
-		storage.setAllyList(allies.stream().map(UUID::toString).collect(Collectors.toList()));
+		storage.markDirty();
 	}
 
+	@Deprecated
 	public void saveAllyRequests(TeamStorage storage) {
-		storage.setAllyRequestList(allyRequests.stream().map(UUID::toString).collect(Collectors.toList()));
+		storage.markDirty();
 	}
 
+	@Deprecated
 	public void saveClaims(TeamStorage storage) {
-		storage.setClaimedChests(claims.stream().map(TeamData::locationToString).filter(value -> value != null)
-				.collect(Collectors.toList()));
+		storage.markDirty();
 	}
 
+	@Deprecated
 	public void saveWarps(TeamStorage storage) {
-		storage.setWarps(warps.stream().map(Warp::toString).collect(Collectors.toList()));
+		storage.markDirty();
 	}
 
+	@Deprecated
 	public void saveEchest(TeamStorage storage) {
-		storage.setEchestContents(echest);
+		storage.markDirty();
 	}
 
+	@Deprecated
 	public void saveMeta(TeamStorage storage) {
-		storage.saveMeta(meta);
+		storage.markDirty();
 	}
 
 	public static Location locationFromString(String loc) {
@@ -237,7 +252,7 @@ public class TeamData {
 	}
 
 	public Set<TeamPlayer> getMembers() {
-		return members;
+		return new HashSet<>(members);
 	}
 
 	public Set<TeamPlayer> getMembersClone() {
@@ -301,14 +316,21 @@ public class TeamData {
 	}
 
 	public void addMember(TeamPlayer player) {
+		ThreadGuard.requirePrimaryThread();
+		player.setMutationListener(mutationListener);
 		members.add(player);
+		changed();
 	}
 
 	public void removeMember(TeamPlayer player) {
+		ThreadGuard.requirePrimaryThread();
 		members.remove(player);
+		player.setMutationListener(null);
+		changed();
 	}
 
 	public AnchorResult anchorPlayer(TeamPlayer player) {
+		ThreadGuard.requirePrimaryThread();
 		if (!hasMember(player)) {
 			return AnchorResult.NOT_IN_TEAM;
 		}
@@ -317,10 +339,12 @@ public class TeamData {
 		}
 		player.setAnchor(true);
 		anchoredPlayers.add(player.getPlayerUUID());
+		changed();
 		return AnchorResult.SUCCESS;
 	}
 
 	public AnchorResult unanchorPlayer(TeamPlayer player) {
+		ThreadGuard.requirePrimaryThread();
 		if (!hasMember(player)) {
 			return AnchorResult.NOT_IN_TEAM;
 		}
@@ -329,6 +353,7 @@ public class TeamData {
 		}
 		player.setAnchor(false);
 		anchoredPlayers.remove(player.getPlayerUUID());
+		changed();
 		return AnchorResult.SUCCESS;
 	}
 
@@ -337,7 +362,11 @@ public class TeamData {
 	}
 
 	public Set<UUID> getAllies() {
-		return allies;
+		return new HashSet<>(allies);
+	}
+
+	public Set<UUID> getBannedPlayersClone() {
+		return new HashSet<>(bannedPlayers);
 	}
 
 	public Set<UUID> getAlliesClone() {
@@ -345,31 +374,43 @@ public class TeamData {
 	}
 
 	public Set<UUID> getAllyRequests() {
-		return allyRequests;
+		return new HashSet<>(allyRequests);
 	}
 
 	public void addAlly(UUID ally) {
+		ThreadGuard.requirePrimaryThread();
 		allies.add(ally);
+		changed();
 	}
 
 	public void removeAlly(UUID ally) {
+		ThreadGuard.requirePrimaryThread();
 		allies.remove(ally);
+		changed();
 	}
 
 	public void addAllyRequest(UUID team) {
+		ThreadGuard.requirePrimaryThread();
 		allyRequests.add(team);
+		changed();
 	}
 
 	public void removeAllyRequest(UUID team) {
+		ThreadGuard.requirePrimaryThread();
 		allyRequests.remove(team);
+		changed();
 	}
 
 	public void addBan(UUID player) {
+		ThreadGuard.requirePrimaryThread();
 		bannedPlayers.add(player);
+		changed();
 	}
 
 	public void removeBan(UUID player) {
+		ThreadGuard.requirePrimaryThread();
 		bannedPlayers.remove(player);
+		changed();
 	}
 
 	public boolean isBanned(OfflinePlayer player) {
@@ -377,24 +418,34 @@ public class TeamData {
 	}
 
 	public void addClaim(Location location) {
-		claims.add(location);
+		ThreadGuard.requirePrimaryThread();
+		claims.add(location.clone());
+		changed();
 	}
 
 	public void removeClaim(Location location) {
+		ThreadGuard.requirePrimaryThread();
 		for (Location claim : getClaimsClone()) {
 			if (claim.equals(location)) {
 				claims.remove(claim);
+				changed();
 				return;
 			}
 		}
 	}
 
 	public void clearClaims() {
+		ThreadGuard.requirePrimaryThread();
 		claims.clear();
+		changed();
 	}
 
 	public Set<Location> getClaimsClone() {
-		return new HashSet<>(claims);
+		Set<Location> clonedClaims = new HashSet<>();
+		for (Location claim : claims) {
+			clonedClaims.add(claim.clone());
+		}
+		return clonedClaims;
 	}
 
 	public boolean isClaimed(Location location) {
@@ -411,7 +462,7 @@ public class TeamData {
 	}
 
 	public Set<Warp> getWarps() {
-		return warps;
+		return new HashSet<>(warps);
 	}
 
 	public Warp getWarp(String name) {
@@ -424,11 +475,15 @@ public class TeamData {
 	}
 
 	public void addWarp(Warp warp) {
+		ThreadGuard.requirePrimaryThread();
 		warps.add(warp);
+		changed();
 	}
 
 	public void removeWarp(Warp warp) {
+		ThreadGuard.requirePrimaryThread();
 		warps.remove(warp);
+		changed();
 	}
 
 	public String getMoneyFormatted() {
@@ -444,7 +499,9 @@ public class TeamData {
 	}
 
 	public void setName(String name) {
+		ThreadGuard.requirePrimaryThread();
 		this.name = name;
+		changed();
 	}
 
 	public String getDescription() {
@@ -452,7 +509,9 @@ public class TeamData {
 	}
 
 	public void setDescription(String description) {
+		ThreadGuard.requirePrimaryThread();
 		this.description = description;
+		changed();
 	}
 
 	public boolean isOpen() {
@@ -460,15 +519,19 @@ public class TeamData {
 	}
 
 	public void setOpen(boolean open) {
+		ThreadGuard.requirePrimaryThread();
 		this.open = open;
+		changed();
 	}
 
 	public Location getTeamHome() {
-		return teamHome;
+		return teamHome == null ? null : teamHome.clone();
 	}
 
 	public void setTeamHome(Location teamHome) {
-		this.teamHome = teamHome;
+		ThreadGuard.requirePrimaryThread();
+		this.teamHome = teamHome == null ? null : teamHome.clone();
+		changed();
 	}
 
 	public boolean isPvp() {
@@ -476,7 +539,9 @@ public class TeamData {
 	}
 
 	public void setPvp(boolean pvp) {
+		ThreadGuard.requirePrimaryThread();
 		this.pvp = pvp;
+		changed();
 	}
 
 	public boolean isUseTeamHomeAsAnchor() {
@@ -484,7 +549,9 @@ public class TeamData {
 	}
 
 	public void setUseTeamHomeAsAnchor(boolean useTeamHomeAsAnchor) {
+		ThreadGuard.requirePrimaryThread();
 		this.useTeamHomeAsAnchor = useTeamHomeAsAnchor;
+		changed();
 	}
 
 	public ChatColor getColor() {
@@ -492,7 +559,9 @@ public class TeamData {
 	}
 
 	public void setColor(ChatColor color) {
+		ThreadGuard.requirePrimaryThread();
 		this.color = color;
+		changed();
 	}
 
 	public int getRank() {
@@ -500,7 +569,9 @@ public class TeamData {
 	}
 
 	public void setRank(int rank) {
+		ThreadGuard.requirePrimaryThread();
 		this.rank = rank;
+		changed();
 	}
 
 	public int getBalRank() {
@@ -508,7 +579,9 @@ public class TeamData {
 	}
 
 	public void setBalRank(int balRank) {
+		ThreadGuard.requirePrimaryThread();
 		this.balRank = balRank;
+		changed();
 	}
 
 	public int getScore() {
@@ -516,7 +589,9 @@ public class TeamData {
 	}
 
 	public void setScore(int score) {
+		ThreadGuard.requirePrimaryThread();
 		this.score = Math.max(minScore, score);
+		changed();
 	}
 
 	public double getMoney() {
@@ -524,15 +599,23 @@ public class TeamData {
 	}
 
 	public void setMoney(double money) {
+		ThreadGuard.requirePrimaryThread();
+		if (!Double.isFinite(money) || money < 0) {
+			throw new IllegalArgumentException("Team balance must be finite and non-negative");
+		}
 		this.money = money;
+		changed();
 	}
 
 	public Inventory getEchest() {
+		ThreadGuard.requirePrimaryThread();
 		return echest;
 	}
 
 	public void setEchest(Inventory echest) {
+		ThreadGuard.requirePrimaryThread();
 		this.echest = echest;
+		changed();
 	}
 
 	public int getLevel() {
@@ -540,7 +623,9 @@ public class TeamData {
 	}
 
 	public void setLevel(int level) {
+		ThreadGuard.requirePrimaryThread();
 		this.level = level;
+		changed();
 	}
 
 	public String getTag() {
@@ -548,14 +633,43 @@ public class TeamData {
 	}
 
 	public void setTag(String tag) {
+		ThreadGuard.requirePrimaryThread();
 		this.tag = tag;
+		changed();
 	}
 
 	public List<UUID> getInvitedPlayers() {
-		return invitedPlayers;
+		return new ArrayList<>(invitedPlayers);
+	}
+
+	public boolean isInvited(UUID player) {
+		return invitedPlayers.contains(player);
+	}
+
+	public void addInvite(UUID player) {
+		ThreadGuard.requirePrimaryThread();
+		invitedPlayers.add(player);
+	}
+
+	public void removeInvite(UUID player) {
+		ThreadGuard.requirePrimaryThread();
+		invitedPlayers.remove(player);
 	}
 
 	public TeamMeta getMeta() {
 		return meta;
+	}
+
+	public void setMutationListener(Runnable mutationListener) {
+		this.mutationListener = mutationListener == null ? () -> {
+		} : mutationListener;
+		meta.setMutationListener(this.mutationListener);
+		for (TeamPlayer member : members) {
+			member.setMutationListener(this.mutationListener);
+		}
+	}
+
+	private void changed() {
+		mutationListener.run();
 	}
 }

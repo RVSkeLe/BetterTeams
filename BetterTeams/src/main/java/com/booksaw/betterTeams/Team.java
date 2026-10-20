@@ -20,6 +20,7 @@ import com.booksaw.betterTeams.customEvents.post.PostTeamColorChangeEvent;
 import com.booksaw.betterTeams.customEvents.post.PostTeamNameChangeEvent;
 import com.booksaw.betterTeams.customEvents.post.PostTeamTagChangeEvent;
 import com.booksaw.betterTeams.exceptions.CancelledEventException;
+import com.booksaw.betterTeams.events.InventoryManagement;
 import com.booksaw.betterTeams.message.Message;
 import com.booksaw.betterTeams.message.MessageManager;
 import com.booksaw.betterTeams.message.ReferencedFormatMessage;
@@ -31,9 +32,9 @@ import com.booksaw.betterTeams.team.level.LevelManager;
 import com.booksaw.betterTeams.team.level.TeamLevel;
 import com.booksaw.betterTeams.team.meta.TeamMeta;
 import com.booksaw.betterTeams.team.storage.storageManager.SQLiteStorageManager;
-import com.booksaw.betterTeams.team.storage.team.StoredTeamValue;
 import com.booksaw.betterTeams.team.storage.team.TeamStorage;
 import com.booksaw.betterTeams.text.LegacyTextUtils;
+import com.booksaw.betterTeams.util.ThreadGuard;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -249,7 +250,7 @@ public class Team {
 	private org.bukkit.scoreboard.Team team;
 
 	/**
-	 * this is used to load a team from the configuration file
+	 * this is used to load a team from storage
 	 *
 	 * @param id the ID of the team to load
 	 */
@@ -257,6 +258,7 @@ public class Team {
 		this.id = id;
 
 		storage = TEAMMANAGER.createTeamStorage(this);
+		data.setMutationListener(this::markDirty);
 
 		data.load(storage);
 
@@ -297,15 +299,14 @@ public class Team {
 		}
 
 		storage = TEAMMANAGER.createNewTeamStorage(this);
-		data.initializeNew(name, storage);
+		data.setMutationListener(this::markDirty);
+		data.initializeNew(name);
 		if (owner != null) {
 			addMember(new TeamPlayer(owner, PlayerRank.OWNER));
 		}
-		data.saveMembers(storage);
-		data.saveAnchoredPlayers(storage);
+		storage.markDirty();
 		/*
-		 * do not need to save config as createNewTeam saves the config after more
-		 * settings modified
+		 * The storage cache is flushed after the remaining team settings are applied.
 		 */
 	}
 
@@ -328,7 +329,7 @@ public class Team {
 
 		TEAMMANAGER.teamNameChange(this, name);
 		data.setName(name);
-		getStorage().set(StoredTeamValue.NAME, name);
+		markDirty();
 
 		registerTeamName();
 
@@ -470,7 +471,7 @@ public class Team {
 		tag = Optional.ofNullable(event.getNewTeamTag()).orElse("");
 
 		data.setTag(tag);
-		getStorage().set(StoredTeamValue.TAG, tag);
+		markDirty();
 
 		registerTeamName();
 
@@ -479,7 +480,7 @@ public class Team {
 
 	public void setOpen(boolean open) {
 		data.setOpen(open);
-		getStorage().set(StoredTeamValue.OPEN, open);
+		markDirty();
 	}
 
 	/**
@@ -489,7 +490,7 @@ public class Team {
 	 */
 	public void setDescription(String description) {
 		data.setDescription(description);
-		getStorage().set(StoredTeamValue.DESCRIPTION, description);
+		markDirty();
 	}
 
 	/**
@@ -509,32 +510,16 @@ public class Team {
 
 		final ChatColor oldColor = getColor();
 		data.setColor(color);
-		getStorage().set(StoredTeamValue.COLOR, color.getChar());
+		markDirty();
 
 		registerTeamName();
 
 		Bukkit.getPluginManager().callEvent(new PostTeamColorChangeEvent(this, oldColor, color));
 	}
 
-	/**
-	 * Used to save the members list to the configuration file
-	 */
-	private void savePlayers() {
-		data.saveMembers(getStorage());
-	}
-
-	/**
-	 * Used to save anchored players in this team
-	 */
-	private void saveAnchoredPlayers() {
-		data.saveAnchoredPlayers(getStorage());
-	}
-
-	/**
-	 * Used to save the bans list to the configuration file
-	 */
-	private void saveBans() {
-		data.saveBans(getStorage());
+	public void markDirty() {
+		ThreadGuard.requirePrimaryThread();
+		storage.markDirty();
 	}
 
 	/**
@@ -571,10 +556,10 @@ public class Team {
 		}
 		getTeamManager().playerLeaveTeam(this, p);
 		data.removeMember(p);
-		savePlayers();
+		markDirty();
 		if (p.isAnchored()) {
 			data.unanchorPlayer(p);
-			saveAnchoredPlayers();
+			markDirty();
 		}
 		Optional<Player> onlinePlayerOpt = p.getOnlinePlayer();
 		if (onlinePlayerOpt.isPresent()) {
@@ -625,8 +610,7 @@ public class Team {
 	public AnchorResult anchorPlayer(TeamPlayer p) {
 		AnchorResult result = data.anchorPlayer(p);
 		if (result == AnchorResult.SUCCESS) {
-			getStorage().setAnchor(p, true);
-			saveAnchoredPlayers();
+			markDirty();
 		}
 		return result;
 	}
@@ -640,8 +624,7 @@ public class Team {
 	public AnchorResult unanchorPlayer(TeamPlayer p) {
 		AnchorResult result = data.unanchorPlayer(p);
 		if (result == AnchorResult.SUCCESS) {
-			getStorage().setAnchor(p, false);
-			saveAnchoredPlayers();
+			markDirty();
 		}
 		return result;
 	}
@@ -693,6 +676,7 @@ public class Team {
 		// I've got to store this here, because otherwise the team information is gone.
 		final Set<UUID> alliesClone = data.getAlliesClone();
 		final Set<TeamPlayer> membersClone = data.getMembersClone();
+		InventoryManagement.closeForTeam(this);
 
 		alliesClone.forEach(uuid -> {
 			Team team = Team.getTeamByTeamId(uuid);
@@ -732,12 +716,7 @@ public class Team {
 	 * @return [true - the player is invited] [false - the player is not invited]
 	 */
 	public boolean isInvited(UUID uuid) {
-		for (UUID temp : data.getInvitedPlayers()) {
-			if (temp.compareTo(uuid) == 0) {
-				return true;
-			}
-		}
-		return false;
+		return data.isInvited(uuid);
 	}
 
 	/**
@@ -746,7 +725,7 @@ public class Team {
 	 * @param uniqueId the UUID of the player being invited
 	 */
 	public void invite(UUID uniqueId) {
-		data.getInvitedPlayers().add(uniqueId);
+		data.addInvite(uniqueId);
 
 		int invite = Main.plugin.getConfig().getInt("invite");
 
@@ -759,7 +738,7 @@ public class Team {
 			if (p == null || getTeamPlayer(p) != null) {
 				return;
 			}
-			data.getInvitedPlayers().remove(uniqueId);
+			data.removeInvite(uniqueId);
 			MessageManager.sendMessage(p, "invite.expired", getName());
 		}, invite * 20L);
 	}
@@ -776,7 +755,7 @@ public class Team {
 		} catch (CancelledEventException e) {
 			return false;
 		}
-		savePlayers();
+		markDirty();
 		return true;
 
 	}
@@ -789,7 +768,7 @@ public class Team {
 		}
 
 		OfflinePlayer offlinePlayer = teamPlayer.getPlayer();
-		data.getInvitedPlayers().remove(offlinePlayer.getUniqueId());
+		data.removeInvite(offlinePlayer.getUniqueId());
 		getTeamManager().playerJoinTeam(this, teamPlayer);
 		data.addMember(teamPlayer);
 
@@ -846,8 +825,7 @@ public class Team {
 		}
 
 		promotePlayer.setRank(event.getNewRank());
-		storage.promotePlayer(promotePlayer);
-		savePlayers();
+		markDirty();
 
 		Bukkit.getPluginManager()
 				.callEvent(new PostPromotePlayerEvent(this, promotePlayer, oldRank, newRank));
@@ -878,8 +856,7 @@ public class Team {
 		}
 
 		demotePlayer.setRank(event.getNewRank());
-		storage.demotePlayer(demotePlayer);
-		savePlayers();
+		markDirty();
 
 		Bukkit.getPluginManager()
 				.callEvent(new PostDemotePlayerEvent(this, demotePlayer, oldRank, newRank));
@@ -887,12 +864,12 @@ public class Team {
 
 	public void setTeamHome(Location teamHome) {
 		data.setTeamHome(teamHome);
-		getStorage().set(StoredTeamValue.HOME, TeamData.locationToString(teamHome));
+		markDirty();
 	}
 
 	public void deleteTeamHome() {
 		data.setTeamHome(null);
-		getStorage().set(StoredTeamValue.HOME, "");
+		markDirty();
 		if (data.isUseTeamHomeAsAnchor()) {
 			setAnchored(false);
 		}
@@ -905,8 +882,7 @@ public class Team {
 	 */
 	public void banPlayer(OfflinePlayer player) {
 		data.addBan(player.getUniqueId());
-		getStorage().addBan(player.getUniqueId());
-		saveBans();
+		markDirty();
 	}
 
 	/**
@@ -916,8 +892,7 @@ public class Team {
 	 */
 	public void unbanPlayer(OfflinePlayer player) {
 		data.removeBan(player.getUniqueId());
-		getStorage().removeBan(player.getUniqueId());
-		saveBans();
+		markDirty();
 	}
 
 	/**
@@ -984,7 +959,7 @@ public class Team {
 
 	public void setScore(int score) {
 		data.setScore(score);
-		getStorage().set(StoredTeamValue.SCORE, data.getScore());
+		markDirty();
 		getTeamManager().invalidateLeaderboards();
 	}
 
@@ -998,8 +973,49 @@ public class Team {
 
 	public void setMoney(double money) {
 		data.setMoney(money);
-		getStorage().set(StoredTeamValue.MONEY, data.getMoney());
+		markDirty();
 		getTeamManager().invalidateLeaderboards();
+	}
+
+	public boolean canDepositMoney(double amount) {
+		ThreadGuard.requirePrimaryThread();
+		if (!Double.isFinite(amount) || amount <= 0) {
+			return false;
+		}
+		double result = getMoney() + amount;
+		return Double.isFinite(result) && (getMaxMoney() < 0 || result <= getMaxMoney());
+	}
+
+	public boolean canWithdrawMoney(double amount) {
+		ThreadGuard.requirePrimaryThread();
+		return Double.isFinite(amount) && amount > 0 && getMoney() >= amount;
+	}
+
+	public boolean tryDepositMoney(double amount) {
+		ThreadGuard.requirePrimaryThread();
+		if (!canDepositMoney(amount)) {
+			return false;
+		}
+		setMoney(getMoney() + amount);
+		return true;
+	}
+
+	public boolean tryWithdrawMoney(double amount) {
+		ThreadGuard.requirePrimaryThread();
+		if (!canWithdrawMoney(amount)) {
+			return false;
+		}
+		setMoney(getMoney() - amount);
+		return true;
+	}
+
+	public boolean tryWithdrawScore(int amount) {
+		ThreadGuard.requirePrimaryThread();
+		if (amount <= 0 || getScore() < amount) {
+			return false;
+		}
+		setScore(getScore() - amount);
+		return true;
 	}
 
 	/**
@@ -1087,8 +1103,7 @@ public class Team {
 
 	public void setTitle(TeamPlayer player, String title) {
 		player.setTitle(title);
-		storage.setTitle(player);
-		savePlayers();
+		markDirty();
 	}
 
 	/**
@@ -1123,8 +1138,7 @@ public class Team {
 		}
 
 		data.addAlly(otherTeam);
-		getStorage().addAlly(otherTeam);
-		saveAllies();
+		markDirty();
 
 		List<String> channelsToUse = Main.plugin.getConfig().getStringList("onAllyMessageChannel");
 		final String displayName = getTeamByTeamId(otherTeam).getDisplayName();
@@ -1186,8 +1200,7 @@ public class Team {
 		}
 
 		data.removeAlly(otherTeam);
-		getStorage().removeAlly(otherTeam);
-		saveAllies();
+		markDirty();
 
 		List<String> channelsToUse;
 		Message chatMessage, titleMessage;
@@ -1271,8 +1284,7 @@ public class Team {
 	 */
 	public void addAllyRequest(UUID team) {
 		data.addAllyRequest(team);
-		getStorage().addAllyRequest(team);
-		saveAllyRequests();
+		markDirty();
 	}
 
 	/**
@@ -1295,8 +1307,7 @@ public class Team {
 	 */
 	public void removeAllyRequest(UUID team) {
 		data.removeAllyRequest(team);
-		getStorage().removeAllyRequest(team);
-		saveAllyRequests();
+		markDirty();
 	}
 
 	/**
@@ -1343,20 +1354,6 @@ public class Team {
 		return data.getAllyRequests();
 	}
 
-	/**
-	 * Used to save the list of allies for this team
-	 */
-	private void saveAllies() {
-		data.saveAllies(getStorage());
-	}
-
-	/**
-	 * Used to save the list of requests for allies for this team
-	 */
-	private void saveAllyRequests() {
-		data.saveAllyRequests(storage);
-	}
-
 	public UUID getID() {
 		return id;
 	}
@@ -1385,6 +1382,10 @@ public class Team {
 		return data.getMembersClone();
 	}
 
+	public Set<UUID> getBannedPlayersClone() {
+		return data.getBannedPlayersClone();
+	}
+
 	public Set<UUID> getAllies() {
 		return data.getAllies();
 	}
@@ -1401,6 +1402,10 @@ public class Team {
 		return data.getWarps();
 	}
 
+	public Set<Location> getClaimsClone() {
+		return data.getClaimsClone();
+	}
+
 	public TeamMeta getMeta() {
 		return data.getMeta();
 	}
@@ -1411,6 +1416,10 @@ public class Team {
 
 	public boolean isPvp() {
 		return data.isPvp();
+	}
+
+	public boolean isUseTeamHomeAsAnchor() {
+		return data.isUseTeamHomeAsAnchor();
 	}
 
 	public int getLevel() {
@@ -1505,13 +1514,6 @@ public class Team {
 	}
 
 	/**
-	 * Used to save all warps that this team has set
-	 */
-	public void saveWarps() {
-		data.saveWarps(storage);
-	}
-
-	/**
 	 * Used to get a warp with the specified name
 	 *
 	 * @param name the name of the warp
@@ -1523,15 +1525,13 @@ public class Team {
 
 	public void addWarp(Warp warp) {
 		data.addWarp(warp);
-		getStorage().addWarp(warp);
-		saveWarps();
+		markDirty();
 	}
 
 	public void delWarp(String name) {
 		Warp warp = getWarp(name);
 		data.removeWarp(warp);
-		getStorage().removeWarp(warp);
-		saveWarps();
+		markDirty();
 	}
 
 	/**
@@ -1553,7 +1553,7 @@ public class Team {
 	public void addClaim(Location location) {
 		data.addClaim(location);
 		Team.getTeamManager().addChestClaim(this, location);
-		saveClaims();
+		markDirty();
 	}
 
 	/**
@@ -1564,7 +1564,7 @@ public class Team {
 	public void removeClaim(Location location) {
 		data.removeClaim(location);
 		Team.getTeamManager().removeChestclaim(this, location);
-		saveClaims();
+		markDirty();
 	}
 
 	public void clearClaims() {
@@ -1572,7 +1572,7 @@ public class Team {
 			Team.getTeamManager().removeChestclaim(this, location);
 		}
 		data.clearClaims();
-		saveClaims();
+		markDirty();
 	}
 
 	public int getClaimCount() {
@@ -1583,16 +1583,24 @@ public class Team {
 		return data.isClaimed(location);
 	}
 
-	private void saveClaims() {
-		data.saveClaims(getStorage());
-	}
-
-	public void saveEchest() {
-		data.saveEchest(getStorage());
-	}
-
 	public Inventory getEchest() {
 		return data.getEchest();
+	}
+
+	/**
+	 * @deprecated Team inventories are serialized as part of the normal dirty-team flush.
+	 */
+	@Deprecated
+	public void saveEchest() {
+		markDirty();
+	}
+
+	/**
+	 * @deprecated Warps are serialized as part of the normal dirty-team flush.
+	 */
+	@Deprecated
+	public void saveWarps() {
+		markDirty();
 	}
 
 	public int getMaxWarps() {
@@ -1605,13 +1613,13 @@ public class Team {
 
 	public void setLevel(int level) {
 		data.setLevel(level);
-		getStorage().set(StoredTeamValue.LEVEL, level);
+		markDirty();
 
 	}
 
 	public void setPvp(boolean pvp) {
 		data.setPvp(pvp);
-		getStorage().set(StoredTeamValue.PVP, pvp);
+		markDirty();
 
 	}
 
@@ -1629,7 +1637,7 @@ public class Team {
 			return false;
 		}
 		data.setUseTeamHomeAsAnchor(anchor);
-		getStorage().set(StoredTeamValue.ANCHOR, anchor);
+		markDirty();
 		return true;
 	}
 
@@ -1696,12 +1704,12 @@ public class Team {
 
 	public void setAndSaveMeta(String key, String value) {
 		data.getMeta().set(key, value);
-		data.saveMeta(getStorage());
+		markDirty();
 	}
 
 	public void removeAndSaveMeta(String key) {
 		data.getMeta().remove(key);
-		data.saveMeta(getStorage());
+		markDirty();
 	}
 
 	public TeamLevel getLevelObject() {

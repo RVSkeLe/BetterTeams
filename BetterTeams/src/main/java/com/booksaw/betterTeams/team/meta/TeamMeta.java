@@ -1,9 +1,11 @@
 package com.booksaw.betterTeams.team.meta;
 
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Collections;
+
+import com.booksaw.betterTeams.util.ThreadGuard;
 
 
 /**
@@ -13,6 +15,8 @@ import java.util.Optional;
 public class TeamMeta {
 
 	private final Map<String, String> metaData;
+	private Runnable mutationListener = () -> {
+	};
 
 	public TeamMeta() {
 		this.metaData = new HashMap<>();
@@ -25,7 +29,9 @@ public class TeamMeta {
 	 * @param value The string value of the metaData.
 	 */
 	public void set(String key, String value) {
+		ThreadGuard.requirePrimaryThread();
 		this.metaData.put(key, value);
+		mutationListener.run();
 	}
 
 	/**
@@ -54,16 +60,18 @@ public class TeamMeta {
 	 * @param key The key of the metaData to remove.
 	 */
 	public void remove(String key) {
+		ThreadGuard.requirePrimaryThread();
 		this.metaData.remove(key);
+		mutationListener.run();
 	}
 
 	/**
-	 * Returns an unmodifiable view of all metaData entries.
+	 * Returns an immutable copy of all metaData entries.
 	 *
 	 * @return An unmodifiable Map of all metaData.
 	 */
 	public Map<String, String> getAll() {
-		return Collections.unmodifiableMap(this.metaData);
+		return Collections.unmodifiableMap(new HashMap<>(this.metaData));
 	}
 
 	/**
@@ -81,10 +89,16 @@ public class TeamMeta {
 	 * @param rawMeta The map of raw metaData to load.
 	 */
 	public void load(Map<String, String> rawMeta) {
+		ThreadGuard.requirePrimaryThread();
 		this.metaData.clear();
 		if (rawMeta != null) {
 			this.metaData.putAll(rawMeta);
 		}
 
+	}
+
+	public void setMutationListener(Runnable mutationListener) {
+		this.mutationListener = mutationListener == null ? () -> {
+		} : mutationListener;
 	}
 }

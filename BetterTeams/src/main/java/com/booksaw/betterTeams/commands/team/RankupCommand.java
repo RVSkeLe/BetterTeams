@@ -24,7 +24,13 @@ public class RankupCommand extends TeamSubCommand {
 			return new CommandResponse("rankup.max");
 		}
 
-		int price = (int) nextLevel.getCostValue();
+		double configuredPrice = nextLevel.getCostValue();
+		if (!Double.isFinite(configuredPrice) || configuredPrice <= 0 || configuredPrice > Integer.MAX_VALUE
+				|| configuredPrice != Math.rint(configuredPrice)) {
+			Main.plugin.getLogger().warning("Rankup values setup wrong for level " + nextLevel.getLevel());
+			return new CommandResponse("rankup.max");
+		}
+		int price = (int) configuredPrice;
 		boolean score = nextLevel.isScoreCost();
 
 		if (price <= 0) {
@@ -55,11 +61,21 @@ public class RankupCommand extends TeamSubCommand {
 		price = event.getCost();
 		newLevelInt = event.getNewLevel();
 		score = event.isScore();
+		if (price <= 0 || newLevelInt <= oldLevel) {
+			Main.plugin.getLogger().warning("A level-up event provided an invalid cost or level for team " + team.getID());
+			return new CommandResponse(false);
+		}
 
-		if (score) {
-			team.setScore(team.getScore() - price);
-		} else {
-			team.setMoney(team.getMoney() - price);
+		if (score && team.getScore() < price) {
+			return new CommandResponse(new ReferencedFormatMessage("rankup.score", price));
+		}
+		if (!score && team.getMoney() < price) {
+			return new CommandResponse(new ReferencedFormatMessage("rankup.money", price));
+		}
+
+		boolean charged = score ? team.tryWithdrawScore(price) : team.tryWithdrawMoney(price);
+		if (!charged) {
+			return new CommandResponse(new ReferencedFormatMessage(score ? "rankup.score" : "rankup.money", price));
 		}
 
 		team.setLevel(newLevelInt);

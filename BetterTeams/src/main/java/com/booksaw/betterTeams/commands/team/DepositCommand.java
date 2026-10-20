@@ -30,7 +30,7 @@ public class DepositCommand extends TeamSubCommand {
 			return new CommandResponse(new HelpMessage(this, label, parentCommand));
 		}
 
-		if (amount <= 0) {
+		if (!isValidAmount(amount)) {
 			return new CommandResponse("deposit.tooLittle");
 		}
 
@@ -42,26 +42,40 @@ public class DepositCommand extends TeamSubCommand {
 			return new CommandResponse("deposit.fail");
 		}
 
-		if (amount != event.getAmount())
-			amount = event.getAmount();
+		amount = event.getAmount();
+		if (!isValidAmount(amount)) {
+			return new CommandResponse("deposit.fail");
+		}
 
-		double result = team.getMoney() + amount;
-
-		if (result > team.getMaxMoney() && team.getMaxMoney() >= 0) {
+		if (!team.canDepositMoney(amount)) {
 			return new CommandResponse("deposit.max");
+		}
+
+		if (Main.econ == null) {
+			return new CommandResponse("deposit.fail");
 		}
 
 		EconomyResponse response = Main.econ.withdrawPlayer(player.getPlayer(), amount);
 
-		if (!response.transactionSuccess()) {
+		if (response == null || !response.transactionSuccess()) {
 			return new CommandResponse("deposit.fail");
 		}
 
-		team.setMoney(result);
+		if (!team.tryDepositMoney(amount)) {
+			EconomyResponse refund = Main.econ.depositPlayer(player.getPlayer(), amount);
+			if (refund == null || !refund.transactionSuccess()) {
+				Main.plugin.getLogger().severe("Could not refund a failed team deposit for " + player.getPlayerUUID());
+			}
+			return new CommandResponse("deposit.fail");
+		}
 
 		Bukkit.getPluginManager().callEvent(new PostTeamDepositEvent(team, player, amount));
 
 		return new CommandResponse(true, "deposit.success");
+	}
+
+	private boolean isValidAmount(double amount) {
+		return Double.isFinite(amount) && amount > 0;
 	}
 
 	@Override

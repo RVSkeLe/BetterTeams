@@ -31,7 +31,7 @@ public class WithdrawCommand extends TeamSubCommand {
 			return new CommandResponse(new HelpMessage(this, label, parentCommand));
 		}
 
-		if (amount <= 0) {
+		if (!isValidAmount(amount)) {
 			return new CommandResponse("withdraw.tooLittle");
 		}
 
@@ -43,24 +43,39 @@ public class WithdrawCommand extends TeamSubCommand {
 			return new CommandResponse("withdraw.fail");
 		}
 
-		if (amount != event.getAmount())
-			amount = event.getAmount();
+		amount = event.getAmount();
+		if (!isValidAmount(amount)) {
+			return new CommandResponse("withdraw.fail");
+		}
 
-		if (team.getMoney() - amount < 0) {
+		if (!team.canWithdrawMoney(amount)) {
+			return new CommandResponse("withdraw.notEnough");
+		}
+
+		if (Main.econ == null) {
+			return new CommandResponse("withdraw.fail");
+		}
+
+		if (!team.tryWithdrawMoney(amount)) {
 			return new CommandResponse("withdraw.notEnough");
 		}
 
 		EconomyResponse response = Main.econ.depositPlayer(player.getPlayer(), amount);
 
-		if (!response.transactionSuccess()) {
+		if (response == null || !response.transactionSuccess()) {
+			if (!team.tryDepositMoney(amount)) {
+				Main.plugin.getLogger().severe("Could not restore team balance after a failed withdrawal for " + team.getID());
+			}
 			return new CommandResponse("withdraw.fail");
 		}
-
-		team.setMoney(team.getMoney() - amount);
 
 		Bukkit.getPluginManager().callEvent(new PostTeamWithdrawEvent(team, player, amount));
 
 		return new CommandResponse(true, "withdraw.success");
+	}
+
+	private boolean isValidAmount(double amount) {
+		return Double.isFinite(amount) && amount > 0;
 	}
 
 	@Override

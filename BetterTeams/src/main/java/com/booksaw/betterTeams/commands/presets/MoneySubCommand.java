@@ -32,7 +32,7 @@ public abstract class MoneySubCommand extends SubCommand {
 			return new CommandResponse("help");
 		}
 
-		if (score < 0) {
+		if (!Double.isFinite(score) || score < 0) {
 			return new CommandResponse("admin.bal.tooSmall");
 		}
 
